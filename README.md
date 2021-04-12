@@ -51,6 +51,13 @@ contract QNFT is ERC721 {
 }
 ```
 
+## QInvestor contract
+
+QInvestor contract uses USDT put inside QSTK contract.
+It contains all the on-invest ERC20 tokens, NFT tokens or all the other type of assets that could make profit.
+Once investment finish, it's converted to USDT and paid back to QSTK contract.
+If user want to withdraw on-invest ERC20 tokens, they can deposit QSTK token into QInvestor contract.
+
 ## TODO
 
 - NFT auction should be available when lots of users want to buy NFTs.
