@@ -13,6 +13,8 @@ The mechanism for this could be
 CONTRACT_USDT_BALANCE = NEW_MINT_AFTER_INITIAL_SUPPLY ^ log(NEW_MINT_AFTER_INITIAL_SUPPLY)
 ```
 
+At a stage, we might need to stop minting for our ERC20 and BEP20 as users' request. We need to add `stopMint() onlyAdmin` function.
+
 ## QNFT ERC721 contract
 
 QNFT contract is providing below functionalities.
