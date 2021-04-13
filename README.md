@@ -45,7 +45,10 @@ contract QNFT is ERC721 {
   // user should pay ETH when mint, and mint price is calculated by params provided
   // NFT Mint Price = QSTK initial sale price (0.00001ETH) * QSTK quantity(user input) * discountRateByDuration +  ImageSetPrice (admin) + Coin selection price(admin)
   mintNFT(emotionId uint256, favCoinId uint256, mintQSTKAmt uint256, lockQSTKDuration uint256) returns ();
+  // At the time of burn event, you will need to not be fully paid for QSTK token
   burnNFT(nftId uint256) returns ();
+  // Upgrade NFT is to replace image to better one he like and add more tokens as they want - should think of restrictions, it is required when users want to mint more than maximum amount, and remove ones that are not qualified than others
+  upgradeNFT(nftId uint256, imageSetId uint256, tokensAdd uint256) returns ();
   transferNFT(nftId uint256, to address) returns ();
 
   unlockQSTKFromNFT(nftId uint256) returns ();
