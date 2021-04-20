@@ -2,6 +2,10 @@
 
 Repo contains all the work done for quiver smart contract development work.
 
+## QREP ERC20 / BEP20 contract
+Reputation token is not transferable for regular users.
+Only governance users or initial admin user has possibility for transfer.
+
 ## QSTK ERC20 / BEP20 contract
 
 QSTK stands for Quiver Stock, Quiver stock is infinitely mintable by providing stable coins, for now, we stick on USDT.
