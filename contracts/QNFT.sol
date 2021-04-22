@@ -97,6 +97,10 @@ contract QNFT is Ownable, ERC721 {
         return totalQstkBalance() - totalAssignedQstk;
     }
 
+    function favCoinCount() public view returns (uint256) {
+        return favCoins.length;
+    }
+
     function favCoinFromName(string memory _name)
         public
         view
