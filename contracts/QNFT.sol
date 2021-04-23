@@ -6,41 +6,39 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "solidity-bytes-utils/contracts/BytesLib.sol";
 
 contract QNFT is Ownable, ERC721 {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
+    using BytesLib for bytes;
 
     // TODO: add events
 
     bool public mintStarted;
     bool public mintPaused; // valid on started = true;
-    address public qstk;
     uint256 public totalSupply; // maximum mintable nft count
     uint256 public circulatingSupply; // current minted nft count
-    uint256 public totalAssignedQstk; // total qstk balance assigned to nfts
-    uint256 public mintPriceMultiplier = 1; // default = 1
 
-    mapping(uint256 => uint256) public qstkBalances;
-    // TODO: timestamp
-    mapping(uint256 => uint256) public unlockTime;
+    address payable public treasury;
+
+    address public qstk;
+    uint256 public totalAssignedQstk; // total qstk balance assigned to nfts
+    mapping(address => uint256) public qstkBalances;
+
+    uint256 public initialSalePrice;
+    uint256 public mintPriceMultiplier; // default = 1
+
+    uint256 public constant EMOTION_COUNT_PER_NFT = 5;
+    uint256 public constant BACKGROUND_IMAGE_COUNT = 4;
+    uint256 public constant ARROW_IMAGE_COUNT = 3;
+    uint256 public constant DEFAULT_IMAGE_PRICE = 0.006 ether;
+    uint256 public constant DEFAULT_COIN_PRICE = 0.004 ether;
 
     struct MintOption {
         uint256 ownableAmount; // e.g. 0QSTK, 100QSTK, 200QSTK, 300QSTK
         uint256 lockDuration; // e.g. 3 months, 6 months, 1 year
         uint256 discount; // percent e.g. 10%, 20%, 30%
-    }
-    MintOption[] public mintOptions; // -> constructor
-
-    uint256 public constant EMOTION_COUNT_PER_NFT = 5;
-    uint256 public constant BACKGROUND_IMAGE_COUNT = 4;
-    uint256 public constant ARROW_IMAGE_COUNT = 3;
-    struct NFTImage {
-        string emotion1;
-        string emotion2;
-        string emotion3;
-        string emotion4;
-        string emotion5;
     }
     struct NFTBackgroundImage {
         // Sunrise-Noon-Evening-Night: based on local time
@@ -55,7 +53,16 @@ contract QNFT is Ownable, ERC721 {
         string image2;
         string image3;
     }
+    struct NFTImage {
+        uint256 price;
+        string emotion1;
+        string emotion2;
+        string emotion3;
+        string emotion4;
+        string emotion5;
+    }
     struct NFTFavCoin {
+        uint256 price;
         string name;
         string symbol;
         string icon;
@@ -64,18 +71,22 @@ contract QNFT is Ownable, ERC721 {
         address erc20;
         string other;
     }
-    NFTImage[] public nftImages; // -> constructor
+    MintOption[] public mintOptions; // -> constructor
     NFTBackgroundImage public bgImage; // -> constructor
     NFTArrowImage public arrowImage; // -> constructor
+
+    NFTImage[] public nftImages; // -> constructor
     NFTFavCoin[] public favCoins; // -> constructor
-    mapping(string => uint256) private favCoinId; // -> constructor
     mapping(string => bool) public isFavCoin; // -> constructor
+    mapping(string => uint256) private favCoinIds; // -> constructor
 
     struct NFTMeta {
         string author;
         address creator;
         string color;
         string story;
+        uint256 createdAt;
+        bool unlocked;
     }
     struct NFTData {
         uint256 imageId;
@@ -83,10 +94,17 @@ contract QNFT is Ownable, ERC721 {
         uint256 mintOptionId;
         NFTMeta meta;
     }
-    mapping(uint256 => NFTData) public nftData;
+    NFTData[] public nftData;
+    mapping(uint256 => bool) private isNftMinted;
 
-    constructor(address _qstk) ERC721("Quiver NFT", "QNFT") {
+    constructor(address _qstk, address payable _treasury)
+        ERC721("Quiver NFT", "QNFT")
+    {
         qstk = _qstk;
+        treasury = _treasury;
+
+        initialSalePrice = 0.00001 ether;
+        mintPriceMultiplier = 1;
     }
 
     function totalQstkBalance() public view returns (uint256) {
@@ -94,7 +112,7 @@ contract QNFT is Ownable, ERC721 {
     }
 
     function remainingQstk() public view returns (uint256) {
-        return totalQstkBalance() - totalAssignedQstk;
+        return totalQstkBalance().sub(totalAssignedQstk);
     }
 
     function favCoinCount() public view returns (uint256) {
@@ -111,12 +129,13 @@ contract QNFT is Ownable, ERC721 {
             string memory website,
             string memory social,
             address erc20,
-            string memory other
+            string memory other,
+            uint256 price
         )
     {
         require(isFavCoin[_name] == false, "QNFT: favcoin not exists");
 
-        uint256 id = favCoinId[_name];
+        uint256 id = favCoinIds[_name];
         require(favCoins.length >= id, "QNFT: favcoin not exists");
 
         NFTFavCoin memory favCoin = favCoins[id.sub(1)];
@@ -128,11 +147,18 @@ contract QNFT is Ownable, ERC721 {
             favCoin.website,
             favCoin.social,
             favCoin.erc20,
-            favCoin.other
+            favCoin.other,
+            favCoin.price
         );
     }
 
     function setTotalSupply(uint256 _totalSupply) public onlyOwner {
+        require(
+            _totalSupply <
+                mintOptions.length.mul(nftImages.length).mul(favCoins.length),
+            "QNFT: too big"
+        );
+
         totalSupply = _totalSupply;
     }
 
@@ -161,14 +187,17 @@ contract QNFT is Ownable, ERC721 {
         mintOptions.pop();
     }
 
-    function addImageSet(string[] memory _urls) public onlyOwner {
+    function addImageSet(uint256 price, string[] memory _urls)
+        public
+        onlyOwner
+    {
         require(
             _urls.length == EMOTION_COUNT_PER_NFT,
             "QNFT: image length does not match"
         );
 
         nftImages.push(
-            NFTImage(_urls[0], _urls[1], _urls[2], _urls[3], _urls[4])
+            NFTImage(price, _urls[0], _urls[1], _urls[2], _urls[3], _urls[4])
         );
     }
 
@@ -198,6 +227,7 @@ contract QNFT is Ownable, ERC721 {
     }
 
     function addFavCoin(
+        uint256 price,
         string memory _name,
         string memory _symbol,
         string memory _icon,
@@ -209,9 +239,18 @@ contract QNFT is Ownable, ERC721 {
         require(isFavCoin[_name] == false, "QNFT: favcoin already exists");
 
         favCoins.push(
-            NFTFavCoin(_name, _symbol, _icon, _website, _social, _erc20, _other)
+            NFTFavCoin(
+                price,
+                _name,
+                _symbol,
+                _icon,
+                _website,
+                _social,
+                _erc20,
+                _other
+            )
         );
-        favCoinId[_name] = favCoins.length;
+        favCoinIds[_name] = favCoins.length;
         isFavCoin[_name] = true;
     }
 
@@ -220,13 +259,13 @@ contract QNFT is Ownable, ERC721 {
 
         require(isFavCoin[_name] == false, "QNFT: favcoin not exists");
 
-        uint256 id = favCoinId[_name].sub(1);
+        uint256 id = favCoinIds[_name].sub(1);
         require(favCoins.length > id, "QNFT: favcoin not exists");
 
         uint256 last = favCoins.length.sub(1);
         favCoins[id] = favCoins[last];
-        favCoinId[favCoins[id].name] = favCoinId[_name];
-        favCoinId[_name] = 0;
+        favCoinIds[favCoins[id].name] = favCoinIds[_name];
+        favCoinIds[_name] = 0;
         isFavCoin[_name] = false;
 
         favCoins.pop();
@@ -237,12 +276,16 @@ contract QNFT is Ownable, ERC721 {
     }
 
     function pauseMint() public onlyOwner {
+        require(mintStarted == true, "QNFT: mint not started");
         require(mintPaused == false, "QNFT: mint already paused");
+
         mintPaused = true;
     }
 
     function unPauseMint() public onlyOwner {
+        require(mintStarted == true, "QNFT: mint not started");
         require(mintPaused == true, "QNFT: mint not paused");
+
         mintPaused = false;
     }
 
@@ -258,32 +301,121 @@ contract QNFT is Ownable, ERC721 {
     function mintNFT(
         uint256 _imageId,
         uint256 _favCoinId,
-        uint256 _mintOption
+        uint256 _mintOptionId,
+        string memory _author,
+        string memory _color,
+        string memory _story
     ) public payable {
-        // TODO: mint NFT + assign to msg.sender + accept ETH from user + update lockedQstk and supply. should be locked < supply
-        // calc mint price is calculated by params provided
-        // NFT Mint Price = QSTK initial sale price (0.00001ETH) * QSTK quantity(user input) * discountRateByDuration +  ImageSetPrice (admin) + Coin selection price(admin)
+        require(mintStarted == true, "QNFT: mint not started");
+        require(
+            circulatingSupply < totalSupply,
+            "QNFT: nft count reached the total supply"
+        );
+
+        require(
+            mintOptions.length > _mintOptionId,
+            "QNFT: invalid mint option"
+        );
+        require(favCoins.length > _favCoinId, "QNFT: invalid fav coin");
+
+        uint256 qstkAmount = mintOptions[_mintOptionId].ownableAmount;
+
+        require(
+            totalAssignedQstk.add(qstkAmount) <= totalSupply,
+            "QNFT: insufficient qstk balance"
+        );
+
+        uint256 discount = mintOptions[_mintOptionId].discount;
+
+        uint256 mintPrice =
+            initialSalePrice
+                .mul(qstkAmount)
+                .mul(discount)
+                .div(100)
+                .add(nftImages[_imageId].price)
+                .add(favCoins[_favCoinId].price);
+
+        require(msg.value >= mintPrice, "QNFT: insufficient mint price");
+
+        uint256 nftId = nftData.length;
+        nftData.push(
+            NFTData(
+                _imageId,
+                _favCoinId,
+                _mintOptionId,
+                NFTMeta(
+                    _author,
+                    msg.sender,
+                    _color,
+                    _story,
+                    block.timestamp,
+                    false
+                )
+            )
+        );
+
+        circulatingSupply = circulatingSupply.add(1);
+        totalAssignedQstk = totalAssignedQstk.add(qstkAmount);
+        qstkBalances[msg.sender] = qstkBalances[msg.sender].add(qstkAmount);
+
+        _mint(address(this), nftId);
     }
 
     function upgradeNftImage(uint256 _nftId, uint256 _imageId) public payable {
-        // TODO: msg.value -> eth deposit value
-        // update nftData
+        require(ownerOf(_nftId) == msg.sender, "QNFT: invalid owner");
+        require(nftData.length >= _nftId, "QNFT: invalid nft id");
+        require(nftImages.length >= _imageId, "QNFT: invalid image id");
+        require(
+            msg.value >= nftImages[_imageId].price,
+            "QNFT: insufficient image upgrade price"
+        );
+
+        nftData[_nftId].imageId = _imageId;
     }
 
     function upgradeNftCoin(uint256 _nftId, uint256 _favCoinId) public payable {
-        // TODO: msg.value -> eth deposit value
-        // update nftData
-    }
+        require(nftData.length >= _nftId, "QNFT: invalid nft id");
+        require(ownerOf(_nftId) == msg.sender, "QNFT: invalid owner");
+        require(favCoins.length >= _favCoinId, "QNFT: invalid image id");
+        require(
+            msg.value >= favCoins[_favCoinId].price,
+            "QNFT: insufficient coin upgrade price"
+        );
 
-    function upgradeNftMintOption(uint256 _nftId, uint256 _mintOptionId)
-        public
-        payable
-    {
-        // TODO: msg.value -> eth deposit value
-        // update nftData
+        nftData[_nftId].favCoinId = _favCoinId;
     }
 
     function unlockQstkFromNft(uint256 _nftId) public {
         // TODO: check nft ownership,  check locked time if expired. transfer qstk tokens to msg.sender.
+        require(nftData.length >= _nftId, "QNFT: invalid nft id");
+        require(ownerOf(_nftId) == msg.sender, "QNFT: invalid owner");
+
+        NFTData storage item = nftData[_nftId];
+        MintOption memory mintOption = mintOptions[item.mintOptionId];
+
+        require(item.meta.unlocked == false, "QNFT: already unlocked");
+        require(
+            item.meta.createdAt.add(mintOption.lockDuration) >= block.timestamp,
+            "QNFT: not able to unlock"
+        );
+
+        uint256 unlockAmount = mintOption.ownableAmount;
+        IERC20(qstk).safeTransfer(msg.sender, unlockAmount);
+        qstkBalances[msg.sender] = qstkBalances[msg.sender].sub(unlockAmount);
+        totalAssignedQstk = totalAssignedQstk.sub(unlockAmount);
+
+        item.meta.unlocked = true;
+    }
+
+    function setTreasury(address payable _treasury) public onlyOwner {
+        require(treasury == _treasury, "QNFT: same treasury");
+
+        treasury = _treasury;
+    }
+
+    function withdrawETH(uint256 _amount) public onlyOwner {
+        require(_amount <= address(this).balance, "QNFT: Not enough eth.");
+
+        treasury.transfer(_amount);
     }
 }
