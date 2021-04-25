@@ -57,6 +57,13 @@ contract QNFT is ERC721 {
 
   unlockQSTKFromNFT(nftId uint256) returns ();
   getNFTInfo(nftId uint256) returns ();
+  
+  // NFT contract sale is done before governance setup, to ensure governance dev funds are put in correct governance managed multi-sig wallet, we need to add simple voter interface so that the addresses with more purchase of locked QSTK could have more voting power
+  // When vote, users vote with multi-sig receiver address that he has verified.
+  // If Quorum reaches and the 50% are same addresses, it can be automatically withdrawn to the wallet by admin
+  // If Quorum does not reach within 2 weeks, 50% goes back to users' wallet and 50% goes to foundation wallet.
+  // At the time of NFT mint, 40% goes to foundation wallet, it's for foundation payment of whitepaper and NFT project development
+  // Here, 40%, and 50% are set as a variable before mint start and once start, can't be modified
 }
 ```
 
