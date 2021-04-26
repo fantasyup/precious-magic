@@ -81,7 +81,7 @@ contract QNFT is ERC721 {
      MultisigAddressVotes[msg.sender] = multisig;
   }
   
-  withdrawToGovernanceMultisigAddress(multisig address) onlyAdmin {
+  withdrawToGovernanceMultisigAddress(multisig address) {
     // TODO: check if min vote time after NFT sale ended, has passed
     // TODO: check if MultisigAddressVotes[multisig] passed quorum of total QSTK locked
     // TODO: withdraw all ETH inside the contract to the address to multisig address
