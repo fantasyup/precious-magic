@@ -60,10 +60,38 @@ contract QNFT is ERC721 {
   
   // NFT contract sale is done before governance setup, to ensure governance dev funds are put in correct governance managed multi-sig wallet, we need to add simple voter interface so that the addresses with more purchase of locked QSTK could have more voting power
   // When vote, users vote with multi-sig receiver address that he has verified.
-  // If Quorum reaches and the 50% are same addresses, it can be automatically withdrawn to the wallet by admin
-  // If Quorum does not reach within 2 weeks, 50% goes back to users' wallet and 50% goes to foundation wallet.
-  // At the time of NFT mint, 40% goes to foundation wallet, it's for foundation payment of whitepaper and NFT project development
-  // Here, 40%, and 50% are set as a variable before mint start and once start, can't be modified
+  // If Quorum reaches with same target multisig address, it is withdrawable by the admin to the address
+  // If Quorum does not reach within max vote time, admin withdraw this to foundation wallet to govern the development process of quiver protocol with the funds.
+ 
+  uint256 minVoteTime = 1 week;
+  uint256 safeVoteEndTime = 3 weeks;
+  uint256 voteQuorum = 50%;
+  uint256 foundationPercentage = 40%; // default - can reset by admin before mint start
+  address foundationWallet = 0xxxxx; // default set as admin wallet on constructor - can reset by admin
+  // TODO: mintNFT: withdraw foundationPercentage of ETH into foundationWallet
+  map[address]uint256 QSTKBalancesByAddress; // TODO: manage this correctly on mint process
+  map[address]uint256 MultisigAddressVoteWeights;
+  map[address]address MultisigAddressVotes;
+  voteGovernanceMultisigAddress(multisig address) {
+     // TODO: check if NFT sale ended
+     if (MultisigAddressVotes[msg.sender] != address(0x0)) { // remove previous vote
+      MultisigAddressVoteWeights[MultisigAddressVotes[msg.sender]] -= QSTKBalancesByAddress[msg.sender];
+     }
+     MultisigAddressVoteWeights[multisig] += QSTKBalancesByAddress[msg.sender];
+     MultisigAddressVotes[msg.sender] = multisig;
+  }
+  
+  withdrawToGovernanceMultisigAddress(multisig address) onlyAdmin {
+    // TODO: check if min vote time after NFT sale ended, has passed
+    // TODO: check if MultisigAddressVotes[multisig] passed quorum of total QSTK locked
+    // TODO: withdraw all ETH inside the contract to the address to multisig address
+  }
+  
+  withdrawIfSafeVoteEndTimePassedAndQuorumDoesNotReach(multisig address) onlyAdmin {
+    // TODO: check if safe vote end time passed and quorum does not reach
+    // TODO: withdraw all ETH inside the contract to the address to multisig address specified by the admin
+    // It means no user want to join governance process or they didn't agree on result, admin become the governer in this case.
+  } 
 }
 ```
 
