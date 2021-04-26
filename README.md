@@ -57,7 +57,10 @@ contract QNFT is ERC721 {
 
   unlockQSTKFromNFT(nftId uint256) returns ();
   getNFTInfo(nftId uint256) returns ();
-  
+ 
+  // TODO: there could be several background type per NFT and it's vary by NFT, could have several background lists like image set
+  // mintNFT could have parameter for NFT background Id - rules are applied same way as image set
+
   // NFT contract sale is done before governance setup, to ensure governance dev funds are put in correct governance managed multi-sig wallet, we need to add simple voter interface so that the addresses with more purchase of locked QSTK could have more voting power
   // When vote, users vote with multi-sig receiver address that he has verified.
   // If Quorum reaches with same target multisig address, it is withdrawable by the admin to the address
