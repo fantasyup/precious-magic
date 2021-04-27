@@ -18,8 +18,6 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
  * anyone can burn his/her tokens + only owner can burn amyone's tokens.
  */
 
-// TODO: add events
-
 contract QRep is Ownable, ERC20Burnable {
     using SafeMath for uint256;
 

@@ -10,6 +10,9 @@ import "solidity-bytes-utils/contracts/BytesLib.sol";
 
 import "./QBaseNFT.sol";
 
+/**
+ * @author fantasy
+ */
 contract QNFT is ERC721, QBaseNFT {
     using SafeERC20 for IERC20;
     using BytesLib for bytes;

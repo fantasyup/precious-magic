@@ -3,6 +3,9 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+/**
+ * @author fantasy
+ */
 contract QBaseNFT is Ownable {
     // structs
     struct MintOption {
@@ -80,7 +83,7 @@ contract QBaseNFT is Ownable {
     NFTImage[] public nftImages;
     NFTFavCoin[] public favCoins;
     mapping(string => bool) public isFavCoin;
-    mapping(string => uint256) private favCoinIds;
+    mapping(string => uint256) internal favCoinIds;
 
     // foundation
     address payable public foundationWallet;

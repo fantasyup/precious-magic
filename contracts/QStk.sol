@@ -20,7 +20,6 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
  * anyone can burn his/her tokens.
  */
 
-// TODO: add events
 contract QStk is Ownable, ERC20PresetMinterPauser {
     using SafeMath for uint256;
 
