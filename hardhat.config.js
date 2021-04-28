@@ -1,12 +1,20 @@
 require("dotenv").config();
+require("@nomiclabs/hardhat-waffle");
+require("hardhat-gas-reporter");
+require("solidity-coverage");
 
 module.exports = {
   defaultNetwork: "hardhat",
+  gasReporter: {
+    showTimeSpent: true,
+    currency: "USD",
+  },
   networks: {
     hardhat: {
       forking: {
         url: `https://mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
       },
+      allowUnlimitedContractSize: true,
     },
     ropsten: {
       url: `https://ropsten.infura.io/v3/${process.env.INFURA_KEY}`,
