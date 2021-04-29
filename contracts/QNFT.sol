@@ -35,7 +35,58 @@ contract QNFT is ERC721, QBaseNFT {
     }
 
     // events
+    event DepositQstk(address indexed owner, uint256 amount);
+    event WithdrawQstk(address indexed owner, uint256 amount);
     event SetTotalSupply(address indexed owner, uint256 totalSupply);
+    event MintNFT(
+        address indexed user,
+        uint256 indexed nftId,
+        uint256 imageId,
+        uint256 bgImageId,
+        uint256 favCoinId,
+        uint256 mintOptionId,
+        string author,
+        string color,
+        string story
+    );
+    event UpgradeNftImage(
+        address indexed user,
+        uint256 indexed nftId,
+        uint256 oldImageId,
+        uint256 newImageId
+    );
+    event UpgradeNftBackground(
+        address indexed user,
+        uint256 indexed nftId,
+        uint256 oldBgImageId,
+        uint256 newBgImageId
+    );
+    event UpgradeNftCoin(
+        address indexed user,
+        uint256 indexed nftId,
+        uint256 oldFavCoinId,
+        uint256 newFavCoinId
+    );
+    event UnlockQstkFromNft(
+        address indexed user,
+        uint256 indexed nftId,
+        uint256 amount
+    );
+    event VoteGovernanceAddress(
+        address indexed voter,
+        address indexed multisig,
+        uint256 amount
+    );
+    event WithdrawToGovernanceAddress(
+        address indexed user,
+        address indexed multisig,
+        uint256 amount
+    );
+    event SafeWithdraw(
+        address indexed owner,
+        address indexed ultisig,
+        uint256 amount
+    );
 
     // qstk
     address public qstk;
@@ -66,11 +117,15 @@ contract QNFT is ERC721, QBaseNFT {
 
     function depositQstk(uint256 _amount) public onlyOwner {
         IERC20(qstk).safeTransferFrom(msg.sender, address(this), _amount);
+
+        emit DepositQstk(msg.sender, _amount);
     }
 
     function withdrawQstk(uint256 _amount) public onlyOwner {
         require(remainingQstk() >= _amount, "QNFT: not enough balance");
         IERC20(qstk).safeTransfer(msg.sender, _amount);
+
+        emit WithdrawQstk(msg.sender, _amount);
     }
 
     // nft
@@ -100,6 +155,31 @@ contract QNFT is ERC721, QBaseNFT {
             uint256(0);
     }
 
+    function mintPrice(
+        uint256 _imageId,
+        uint256 _bgImageId,
+        uint256 _favCoinId,
+        uint256 _mintOptionId
+    ) public view returns (uint256) {
+        require(nftImages.length > _imageId, "QNFT: invalid image option");
+        require(
+            bgImages.length > _bgImageId,
+            "QNFT: invalid background option"
+        );
+        require(
+            mintOptions.length > _mintOptionId,
+            "QNFT: invalid mint option"
+        );
+        require(favCoins.length > _favCoinId, "QNFT: invalid fav coin");
+
+        return
+            ((((initialSalePrice *
+                mintOptions[_mintOptionId].ownableAmount *
+                mintOptions[_mintOptionId].discount) / 100) +
+                nftImages[_imageId].mintPrice +
+                favCoins[_favCoinId].mintPrice) * mintPriceMultiplier) / 100;
+    }
+
     function mintNFT(
         uint256 _imageId,
         uint256 _bgImageId,
@@ -115,16 +195,11 @@ contract QNFT is ERC721, QBaseNFT {
             "QNFT: nft count reached the total supply"
         );
 
-        require(nftImages.length > _imageId, "QNFT: invalid image option");
         require(
-            bgImages.length > _bgImageId,
-            "QNFT: invalid background option"
+            msg.value >=
+                mintPrice(_imageId, _bgImageId, _favCoinId, _mintOptionId),
+            "QNFT: insufficient mint price"
         );
-        require(
-            mintOptions.length > _mintOptionId,
-            "QNFT: invalid mint option"
-        );
-        require(favCoins.length > _favCoinId, "QNFT: invalid fav coin");
 
         uint256 qstkAmount = mintOptions[_mintOptionId].ownableAmount;
 
@@ -132,15 +207,6 @@ contract QNFT is ERC721, QBaseNFT {
             totalAssignedQstk + qstkAmount <= totalSupply,
             "QNFT: insufficient qstk balance"
         );
-
-        uint256 discount = mintOptions[_mintOptionId].discount;
-
-        uint256 mintPrice =
-            ((initialSalePrice * qstkAmount * discount) / 100) +
-                nftImages[_imageId].price +
-                favCoins[_favCoinId].price;
-
-        require(msg.value >= mintPrice, "QNFT: insufficient mint price");
 
         require(
             !isNftMinted(_imageId, _bgImageId, _favCoinId, _mintOptionId),
@@ -164,6 +230,18 @@ contract QNFT is ERC721, QBaseNFT {
         _transferFoundation((msg.value * FOUNDATION_PERCENTAGE) / 100);
 
         _mint(address(this), nftCount);
+
+        emit MintNFT(
+            msg.sender,
+            nftCount,
+            _imageId,
+            _bgImageId,
+            _favCoinId,
+            _mintOptionId,
+            _author,
+            _color,
+            _story
+        );
     }
 
     function upgradeNftImage(uint256 _nftId, uint256 _imageId) public payable {
@@ -174,14 +252,17 @@ contract QNFT is ERC721, QBaseNFT {
         require(ownerOf(_nftId) == msg.sender, "QNFT: invalid owner");
         require(nftImages.length >= _imageId, "QNFT: invalid image id");
         require(
-            msg.value >= nftImages[_imageId].price,
+            msg.value >= nftImages[_imageId].mintPrice,
             "QNFT: insufficient image upgrade price"
         );
 
+        uint256 oldImageId = nftData[_nftId].imageId;
         nftData[_nftId].imageId = _imageId;
 
         // transfer to foundation wallet
         _transferFoundation((msg.value * FOUNDATION_PERCENTAGE) / 100);
+
+        emit UpgradeNftImage(msg.sender, _nftId, oldImageId, _imageId);
     }
 
     function upgradeNftBackground(uint256 _nftId, uint256 _bgImageId)
@@ -198,7 +279,10 @@ contract QNFT is ERC721, QBaseNFT {
             "QNFT: invalid background image id"
         );
 
+        uint256 oldBgImageId = nftData[_nftId].bgImageId;
         nftData[_nftId].bgImageId = _bgImageId;
+
+        emit UpgradeNftBackground(msg.sender, _nftId, oldBgImageId, _bgImageId);
     }
 
     function upgradeNftCoin(uint256 _nftId, uint256 _favCoinId) public payable {
@@ -209,14 +293,17 @@ contract QNFT is ERC721, QBaseNFT {
         require(ownerOf(_nftId) == msg.sender, "QNFT: invalid owner");
         require(favCoins.length >= _favCoinId, "QNFT: invalid image id");
         require(
-            msg.value >= favCoins[_favCoinId].price,
+            msg.value >= favCoins[_favCoinId].mintPrice,
             "QNFT: insufficient coin upgrade price"
         );
 
+        uint256 oldFavCoinId = nftData[_nftId].favCoinId;
         nftData[_nftId].favCoinId = _favCoinId;
 
         // transfer to foundation wallet
         _transferFoundation((msg.value * FOUNDATION_PERCENTAGE) / 100);
+
+        emit UpgradeNftCoin(msg.sender, _nftId, oldFavCoinId, _favCoinId);
     }
 
     function unlockQstkFromNft(uint256 _nftId) public {
@@ -241,6 +328,8 @@ contract QNFT is ERC721, QBaseNFT {
         totalAssignedQstk = totalAssignedQstk - unlockAmount;
 
         item.meta.unlocked = true;
+
+        emit UnlockQstkFromNft(msg.sender, _nftId, unlockAmount);
     }
 
     function voteGovernanceAddress(address multisig) public {
@@ -252,10 +341,19 @@ contract QNFT is ERC721, QBaseNFT {
 
         if (voteAddress[msg.sender] != address(0x0)) {
             // remove previous vote
-            voteWeights[voteAddress[msg.sender]] -= qstkBalances[msg.sender];
+            voteWeights[voteAddress[msg.sender]] -= voteWeightsByAddress[
+                msg.sender
+            ];
         }
         voteWeights[multisig] += qstkBalances[msg.sender];
+        voteWeightsByAddress[msg.sender] = qstkBalances[msg.sender];
         voteAddress[msg.sender] = multisig;
+
+        emit VoteGovernanceAddress(
+            msg.sender,
+            multisig,
+            qstkBalances[msg.sender]
+        );
     }
 
     function withdrawToGovernanceAddress(address payable multisig) public {
@@ -275,7 +373,10 @@ contract QNFT is ERC721, QBaseNFT {
             "QNFT: specified multisig address is not voted enough"
         );
 
+        uint256 amount = address(this).balance;
         multisig.transfer(address(this).balance);
+
+        emit WithdrawToGovernanceAddress(msg.sender, multisig, amount);
     }
 
     function safeWithdraw(address payable multisig) public onlyOwner {
@@ -295,7 +396,10 @@ contract QNFT is ERC721, QBaseNFT {
             "QNFT: wait until safe vote end time"
         );
 
+        uint256 amount = address(this).balance;
         multisig.transfer(address(this).balance);
+
+        emit SafeWithdraw(msg.sender, multisig, amount);
     }
 
     // internal functions

@@ -27,7 +27,7 @@ contract QBaseNFT is Ownable {
         string image3;
     }
     struct NFTImage {
-        uint256 price;
+        uint256 mintPrice;
         string emotion1;
         string emotion2;
         string emotion3;
@@ -35,7 +35,7 @@ contract QBaseNFT is Ownable {
         string emotion5;
     }
     struct NFTFavCoin {
-        uint256 price;
+        uint256 mintPrice;
         string name;
         string symbol;
         string icon;
@@ -53,9 +53,29 @@ contract QBaseNFT is Ownable {
         address indexed owner,
         uint256 ownableAmount,
         uint256 indexed lockDuration,
-        uint256 discount
+        uint256 discount // percent
     );
     event RemoveMintOption(address indexed owner, uint256 indexed mintOptionId);
+    event AddImageSet(address indexed owner, uint256 mintPrice, string[] urls);
+    event RemoveImageSet(address indexed owner, uint256 indexed nftImageId);
+    event AddBgImage(address indexed owner, string[] urls);
+    event RemoveBgImage(address indexed owner, uint256 indexed bgImageId);
+    event AddFavCoin(
+        address indexed owner,
+        uint256 mintPrice,
+        string indexed name,
+        string symbol,
+        string icon,
+        string website,
+        string social,
+        address erc20,
+        string other
+    );
+    event RemoveFavCoin(address indexed owner, string indexed name);
+    event StartMint(address indexed owner, uint256 startedAt);
+    event PauseMint(address indexed owner, uint256 pausedAt);
+    event UnpauseMint(address indexed owner, uint256 unPausedAt);
+    event SetFoundationWallet(address indexed owner, address wallet);
 
     // constants
     uint256 public constant EMOTION_COUNT_PER_NFT = 5;
@@ -75,7 +95,7 @@ contract QBaseNFT is Ownable {
     uint256 public mintStartTime;
     bool public mintPaused;
     uint256 public initialSalePrice;
-    uint256 public mintPriceMultiplier;
+    uint256 public mintPriceMultiplier; // percent
 
     MintOption[] public mintOptions;
     NFTBackgroundImage[] public bgImages;
@@ -91,54 +111,18 @@ contract QBaseNFT is Ownable {
     // vote options
     mapping(address => uint256) voteWeights;
     mapping(address => address) voteAddress;
+    mapping(address => uint256) voteWeightsByAddress;
 
     constructor(address payable _foundationWallet) {
         // mint
         initialSalePrice = 0.00001 ether;
-        mintPriceMultiplier = 1;
+        mintPriceMultiplier = 100; // 100%
 
         // foundation
         foundationWallet = _foundationWallet;
     }
 
     // mint
-    function favCoinCount() public view returns (uint256) {
-        return favCoins.length;
-    }
-
-    function favCoinFromName(string memory _name)
-        public
-        view
-        returns (
-            string memory name,
-            string memory symbol,
-            string memory icon,
-            string memory website,
-            string memory social,
-            address erc20,
-            string memory other,
-            uint256 price
-        )
-    {
-        require(isFavCoin[_name] == false, "QBaseNFT: favcoin not exists");
-
-        uint256 id = favCoinIds[_name];
-        require(favCoins.length >= id, "QBaseNFT: favcoin not exists");
-
-        NFTFavCoin memory favCoin = favCoins[id - 1];
-
-        return (
-            favCoin.name,
-            favCoin.symbol,
-            favCoin.icon,
-            favCoin.website,
-            favCoin.social,
-            favCoin.erc20,
-            favCoin.other,
-            favCoin.price
-        );
-    }
-
     function setMintPriceMultiplier(uint256 _mintPriceMultiplier)
         public
         onlyOwner
@@ -146,6 +130,10 @@ contract QBaseNFT is Ownable {
         mintPriceMultiplier = _mintPriceMultiplier;
 
         emit SetMintPriceMultiplier(msg.sender, mintPriceMultiplier);
+    }
+
+    function mintOptionsCount() public view returns (uint256) {
+        return mintOptions.length;
     }
 
     function addMintOption(
@@ -175,7 +163,11 @@ contract QBaseNFT is Ownable {
         emit RemoveMintOption(msg.sender, _mintOptionId);
     }
 
-    function addImageSet(uint256 price, string[] memory _urls)
+    function nftImagesCount() public view returns (uint256) {
+        return nftImages.length;
+    }
+
+    function addImageSet(uint256 _mintPrice, string[] memory _urls)
         public
         onlyOwner
     {
@@ -185,8 +177,17 @@ contract QBaseNFT is Ownable {
         );
 
         nftImages.push(
-            NFTImage(price, _urls[0], _urls[1], _urls[2], _urls[3], _urls[4])
+            NFTImage(
+                _mintPrice,
+                _urls[0],
+                _urls[1],
+                _urls[2],
+                _urls[3],
+                _urls[4]
+            )
         );
+
+        emit AddImageSet(msg.sender, _mintPrice, _urls);
     }
 
     function removeImageSet(uint256 _nftImageId) public onlyOwner {
@@ -197,6 +198,12 @@ contract QBaseNFT is Ownable {
 
         nftImages[_nftImageId] = nftImages[length - 1];
         nftImages.pop();
+
+        emit RemoveImageSet(msg.sender, _nftImageId);
+    }
+
+    function bgImagesCount() public view returns (uint256) {
+        return bgImages.length;
     }
 
     function addBgImage(string[] memory _urls) public onlyOwner {
@@ -208,6 +215,8 @@ contract QBaseNFT is Ownable {
         bgImages.push(
             NFTBackgroundImage(_urls[0], _urls[1], _urls[2], _urls[3])
         );
+
+        emit AddBgImage(msg.sender, _urls);
     }
 
     function removeBgImage(uint256 _bgImageId) public onlyOwner {
@@ -218,10 +227,49 @@ contract QBaseNFT is Ownable {
 
         bgImages[_bgImageId] = bgImages[length - 1];
         bgImages.pop();
+
+        emit RemoveBgImage(msg.sender, _bgImageId);
+    }
+
+    function favCoinsCount() public view returns (uint256) {
+        return favCoins.length;
+    }
+
+    function favCoinFromName(string memory _name)
+        public
+        view
+        returns (
+            string memory name,
+            string memory symbol,
+            string memory icon,
+            string memory website,
+            string memory social,
+            address erc20,
+            string memory other,
+            uint256 mintPrice
+        )
+    {
+        require(isFavCoin[_name] == false, "QBaseNFT: favcoin not exists");
+
+        uint256 id = favCoinIds[_name];
+        require(favCoins.length >= id, "QBaseNFT: favcoin not exists");
+
+        NFTFavCoin memory favCoin = favCoins[id - 1];
+
+        return (
+            favCoin.name,
+            favCoin.symbol,
+            favCoin.icon,
+            favCoin.website,
+            favCoin.social,
+            favCoin.erc20,
+            favCoin.other,
+            favCoin.mintPrice
+        );
     }
 
     function addFavCoin(
-        uint256 price,
+        uint256 _mintPrice,
         string memory _name,
         string memory _symbol,
         string memory _icon,
@@ -234,7 +282,7 @@ contract QBaseNFT is Ownable {
 
         favCoins.push(
             NFTFavCoin(
-                price,
+                _mintPrice,
                 _name,
                 _symbol,
                 _icon,
@@ -246,6 +294,18 @@ contract QBaseNFT is Ownable {
         );
         favCoinIds[_name] = favCoins.length;
         isFavCoin[_name] = true;
+
+        emit AddFavCoin(
+            msg.sender,
+            _mintPrice,
+            _name,
+            _symbol,
+            _icon,
+            _website,
+            _social,
+            _erc20,
+            _other
+        );
     }
 
     function removeFavCoin(string memory _name) public onlyOwner {
@@ -263,11 +323,15 @@ contract QBaseNFT is Ownable {
         isFavCoin[_name] = false;
 
         favCoins.pop();
+
+        emit RemoveFavCoin(msg.sender, _name);
     }
 
     function startMint() public onlyOwner {
         mintStarted = true;
         mintStartTime = block.timestamp;
+
+        emit StartMint(msg.sender, mintStartTime);
     }
 
     function pauseMint() public onlyOwner {
@@ -275,6 +339,8 @@ contract QBaseNFT is Ownable {
         require(mintPaused == false, "QBaseNFT: mint already paused");
 
         mintPaused = true;
+
+        emit PauseMint(msg.sender, block.timestamp);
     }
 
     function unPauseMint() public onlyOwner {
@@ -282,6 +348,8 @@ contract QBaseNFT is Ownable {
         require(mintPaused == true, "QBaseNFT: mint not paused");
 
         mintPaused = false;
+
+        emit UnpauseMint(msg.sender, block.timestamp);
     }
 
     // foundation
@@ -295,5 +363,7 @@ contract QBaseNFT is Ownable {
         );
 
         foundationWallet = _foundationWallet;
+
+        emit SetFoundationWallet(msg.sender, _foundationWallet);
     }
 }
