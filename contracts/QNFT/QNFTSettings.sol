@@ -2,11 +2,15 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "../interface/IQNFT.sol";
 
 /**
  * @author fantasy
  */
-contract QBaseNFT is Ownable {
+contract QNFTSettings is Ownable {
+    using SafeMath for uint256;
+
     // structs
     struct MintOption {
         uint256 ownableAmount; // e.g. 0QSTK, 100QSTK, 200QSTK, 300QSTK
@@ -72,10 +76,6 @@ contract QBaseNFT is Ownable {
         string other
     );
     event RemoveFavCoin(address indexed owner, string indexed name);
-    event StartMint(address indexed owner, uint256 startedAt);
-    event PauseMint(address indexed owner, uint256 pausedAt);
-    event UnpauseMint(address indexed owner, uint256 unPausedAt);
-    event SetFoundationWallet(address indexed owner, address wallet);
 
     // constants
     uint256 public constant EMOTION_COUNT_PER_NFT = 5;
@@ -83,17 +83,8 @@ contract QBaseNFT is Ownable {
     uint256 public constant ARROW_IMAGE_COUNT = 3;
     uint256 public constant DEFAULT_IMAGE_PRICE = 0.006 ether;
     uint256 public constant DEFAULT_COIN_PRICE = 0.004 ether;
-    uint256 public constant NFT_SALE_DURATION = 1209600; // 2 weeks
-
-    uint256 public constant FOUNDATION_PERCENTAGE = 40; // 40%
-    uint256 public constant MIN_VOTE_DURATION = 604800; // 1 week
-    uint256 public constant SAFE_VOTE_END_DURATION = 1814400; // 3 weeks
-    uint256 public constant VOTE_QUORUM = 50; // 50%
 
     // mint options set
-    bool public mintStarted;
-    uint256 public mintStartTime;
-    bool public mintPaused;
     uint256 public initialSalePrice;
     uint256 public mintPriceMultiplier; // percent
 
@@ -105,21 +96,12 @@ contract QBaseNFT is Ownable {
     mapping(string => bool) public isFavCoin;
     mapping(string => uint256) internal favCoinIds;
 
-    // foundation
-    address payable public foundationWallet;
+    address qnft;
 
-    // vote options
-    mapping(address => uint256) voteWeights;
-    mapping(address => address) voteAddress;
-    mapping(address => uint256) voteWeightsByAddress;
-
-    constructor(address payable _foundationWallet) {
+    constructor() {
         // mint
         initialSalePrice = 0.00001 ether;
         mintPriceMultiplier = 100; // 100%
-
-        // foundation
-        foundationWallet = _foundationWallet;
     }
 
     // mint
@@ -152,7 +134,10 @@ contract QBaseNFT is Ownable {
     }
 
     function removeMintOption(uint256 _mintOptionId) public onlyOwner {
-        require(mintStarted == false, "QBaseNFT: mint already started");
+        require(
+            IQNFT(qnft).mintStarted() == false,
+            "QBaseNFT: mint already started"
+        );
 
         uint256 length = mintOptions.length;
         require(length > _mintOptionId, "QBaseNFT: invalid mint option id");
@@ -191,7 +176,10 @@ contract QBaseNFT is Ownable {
     }
 
     function removeImageSet(uint256 _nftImageId) public onlyOwner {
-        require(mintStarted == false, "QBaseNFT: mint already started");
+        require(
+            IQNFT(qnft).mintStarted() == false,
+            "QBaseNFT: mint already started"
+        );
 
         uint256 length = nftImages.length;
         require(length > _nftImageId, "QBaseNFT: invalid id");
@@ -220,7 +208,10 @@ contract QBaseNFT is Ownable {
     }
 
     function removeBgImage(uint256 _bgImageId) public onlyOwner {
-        require(mintStarted == false, "QBaseNFT: mint already started");
+        require(
+            IQNFT(qnft).mintStarted() == false,
+            "QBaseNFT: mint already started"
+        );
 
         uint256 length = bgImages.length;
         require(length > _bgImageId, "QBaseNFT: invalid id");
@@ -309,7 +300,10 @@ contract QBaseNFT is Ownable {
     }
 
     function removeFavCoin(string memory _name) public onlyOwner {
-        require(mintStarted == false, "QBaseNFT: mint already started");
+        require(
+            IQNFT(qnft).mintStarted() == false,
+            "QBaseNFT: mint already started"
+        );
 
         require(isFavCoin[_name] == false, "QBaseNFT: favcoin not exists");
 
@@ -327,43 +321,38 @@ contract QBaseNFT is Ownable {
         emit RemoveFavCoin(msg.sender, _name);
     }
 
-    function startMint() public onlyOwner {
-        mintStarted = true;
-        mintStartTime = block.timestamp;
-
-        emit StartMint(msg.sender, mintStartTime);
-    }
-
-    function pauseMint() public onlyOwner {
-        require(mintStarted == true, "QBaseNFT: mint not started");
-        require(mintPaused == false, "QBaseNFT: mint already paused");
-
-        mintPaused = true;
-
-        emit PauseMint(msg.sender, block.timestamp);
-    }
-
-    function unPauseMint() public onlyOwner {
-        require(mintStarted == true, "QBaseNFT: mint not started");
-        require(mintPaused == true, "QBaseNFT: mint not paused");
-
-        mintPaused = false;
-
-        emit UnpauseMint(msg.sender, block.timestamp);
-    }
-
-    // foundation
-    function setFoundationWallet(address payable _foundationWallet)
-        public
-        onlyOwner
-    {
+    function calcMintPrice(
+        uint256 _imageId,
+        uint256 _bgImageId,
+        uint256 _favCoinId,
+        uint256 _mintOptionId
+    ) external view returns (uint256) {
+        require(nftImages.length > _imageId, "QNFT: invalid image option");
         require(
-            foundationWallet == _foundationWallet,
-            "QBaseNFT: same foundation wallet"
+            bgImages.length > _bgImageId,
+            "QNFT: invalid background option"
         );
+        require(
+            mintOptions.length > _mintOptionId,
+            "QNFT: invalid mint option"
+        );
+        require(favCoins.length > _favCoinId, "QNFT: invalid fav coin");
 
-        foundationWallet = _foundationWallet;
+        return
+            (
+                initialSalePrice
+                    .mul(mintOptions[_mintOptionId].ownableAmount)
+                    .mul(mintOptions[_mintOptionId].discount)
+                    .div(100)
+                    .add(nftImages[_imageId].mintPrice)
+            )
+                .mul(mintPriceMultiplier)
+                .div(100);
+    }
 
-        emit SetFoundationWallet(msg.sender, _foundationWallet);
+    function setQNft(address _qnft) public onlyOwner {
+        require(qnft != _qnft, "QNFTSettings: QNFT already set");
+
+        qnft = _qnft;
     }
 }
