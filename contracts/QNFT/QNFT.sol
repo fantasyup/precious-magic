@@ -24,14 +24,15 @@ contract QNFT is Ownable, ERC721 {
         address creator;
         string color;
         string story;
-        uint256 createdAt;
-        bool unlocked;
     }
     struct NFTData {
         uint256 imageId;
         uint256 bgImageId;
         uint256 favCoinId;
         uint256 mintOptionId;
+        uint256 mintAmount;
+        uint256 createdAt;
+        bool unlocked;
         NFTMeta meta;
     }
 
@@ -104,6 +105,7 @@ contract QNFT is Ownable, ERC721 {
     address public qstk;
     uint256 public totalAssignedQstk; // total qstk balance assigned to nfts
     mapping(address => uint256) public qstkBalances;
+    mapping(address => uint256) public freeAllocations;
 
     // nft
     QNFTSettings settings;
@@ -157,6 +159,24 @@ contract QNFT is Ownable, ERC721 {
         IERC20(qstk).safeTransfer(msg.sender, _amount);
 
         emit WithdrawQstk(msg.sender, _amount);
+    }
+
+    function addFreeAllocation(address _user, uint256 _amount)
+        public
+        onlyOwner
+    {
+        freeAllocations[_user] = freeAllocations[_user].add(_amount);
+    }
+
+    function removeFreeAllocation(address _user, uint256 _amount)
+        public
+        onlyOwner
+    {
+        if (freeAllocations[_user] > _amount) {
+            freeAllocations[_user] = freeAllocations[_user].sub(_amount);
+        } else {
+            freeAllocations[_user] = 0;
+        }
     }
 
     // nft
@@ -218,6 +238,7 @@ contract QNFT is Ownable, ERC721 {
         uint256 _bgImageId,
         uint256 _favCoinId,
         uint256 _mintOptionId,
+        uint256 _mintAmount,
         string memory _author,
         string memory _color,
         string memory _story
@@ -234,15 +255,17 @@ contract QNFT is Ownable, ERC721 {
                     _imageId,
                     _bgImageId,
                     _favCoinId,
-                    _mintOptionId
+                    _mintOptionId,
+                    _mintAmount,
+                    freeAllocations[msg.sender]
                 ),
             "QNFT: insufficient mint price"
         );
 
-        (uint256 qstkAmount, , ) = settings.mintOptions(_mintOptionId);
+        uint256 qstkAmount = _mintAmount.add(freeAllocations[msg.sender]);
 
         require(
-            totalAssignedQstk.add(qstkAmount) <= totalSupply,
+            totalAssignedQstk.add(qstkAmount) <= totalQstkBalance(),
             "QNFT: insufficient qstk balance"
         );
 
@@ -257,12 +280,16 @@ contract QNFT is Ownable, ERC721 {
             _favCoinId,
             _bgImageId,
             _mintOptionId,
-            NFTMeta(_author, msg.sender, _color, _story, block.timestamp, false)
+            qstkAmount,
+            block.timestamp,
+            false,
+            NFTMeta(_author, msg.sender, _color, _story)
         );
         _setNftId(_imageId, _bgImageId, _favCoinId, _mintOptionId, nftCount);
 
         totalAssignedQstk = totalAssignedQstk.add(qstkAmount);
         qstkBalances[msg.sender] = qstkBalances[msg.sender].add(qstkAmount);
+        freeAllocations[msg.sender] = 0;
 
         // transfer to foundation wallet
         _transferFoundation(msg.value.mul(FOUNDATION_PERCENTAGE).div(100));
@@ -362,21 +389,20 @@ contract QNFT is Ownable, ERC721 {
         require(ownerOf(_nftId) == msg.sender, "QNFT: invalid owner");
 
         NFTData storage item = nftData[_nftId];
-        (uint256 ownableAmount, uint256 lockDuration, ) =
-            settings.mintOptions(item.mintOptionId);
+        (, , uint256 lockDuration, ) = settings.mintOptions(item.mintOptionId);
 
-        require(item.meta.unlocked == false, "QNFT: already unlocked");
+        require(item.unlocked == false, "QNFT: already unlocked");
         require(
-            item.meta.createdAt.add(lockDuration) >= block.timestamp,
+            item.createdAt.add(lockDuration) >= block.timestamp,
             "QNFT: not able to unlock"
         );
 
-        uint256 unlockAmount = ownableAmount;
+        uint256 unlockAmount = item.mintAmount;
         IERC20(qstk).safeTransfer(msg.sender, unlockAmount);
         qstkBalances[msg.sender] = qstkBalances[msg.sender].sub(unlockAmount);
         totalAssignedQstk = totalAssignedQstk.sub(unlockAmount);
 
-        item.meta.unlocked = true;
+        item.unlocked = true;
 
         emit UnlockQstkFromNft(msg.sender, _nftId, unlockAmount);
     }

@@ -19,8 +19,8 @@ const nftImages = {
   D: ["D1", "D2", "D3", "D4", "D5"],
 };
 
-describe("QNFT", () => {
-  let qstk, qnft;
+describe("Tests", () => {
+  let qstk, qnft, qnftSettings;
   let deployer, foundation, user;
 
   before(async () => {
@@ -33,9 +33,19 @@ describe("QNFT", () => {
     qstk = await QStkFactory.deploy(units(300000000));
     await qstk.deployed();
 
+    const QNFTSettingsFactory = await ethers.getContractFactory("QNFTSettings");
+    qnftSettings = await QNFTSettingsFactory.deploy();
+    await qnftSettings.deployed();
+
     const QNFTFactory = await ethers.getContractFactory("QNFT");
-    qnft = await QNFTFactory.deploy(qstk.address, foundation.address);
+    qnft = await QNFTFactory.deploy(
+      qstk.address,
+      qnftSettings.address,
+      foundation.address
+    );
     await qnft.deployed();
+
+    await qnftSettings.setQNft(qnft.address);
   });
 
   describe("QNFT: owner can manage qstk balance", () => {
@@ -90,78 +100,87 @@ describe("QNFT", () => {
     });
   });
 
-  describe("QNFT: owner can manager nft/mint options", () => {
+  describe("QNFTSettings: owner can manager nft/mint options", () => {
     it("Should be ble to set mint price multiplier", async () => {
       await expect(
-        qnft.connect(user).setMintPriceMultiplier(200)
+        qnftSettings.connect(user).setMintPriceMultiplier(200)
       ).to.be.revertedWith("Ownable: caller is not the owner");
 
-      expect(await qnft.callStatic.mintPriceMultiplier()).to.be.equal(100);
-      await qnft.setMintPriceMultiplier(200);
-      expect(await qnft.callStatic.mintPriceMultiplier()).to.be.equal(200);
-      await qnft.setMintPriceMultiplier(100);
-      expect(await qnft.callStatic.mintPriceMultiplier()).to.be.equal(100);
+      expect(await qnftSettings.callStatic.mintPriceMultiplier()).to.be.equal(
+        100
+      );
+      await qnftSettings.setMintPriceMultiplier(200);
+      expect(await qnftSettings.callStatic.mintPriceMultiplier()).to.be.equal(
+        200
+      );
+      await qnftSettings.setMintPriceMultiplier(100);
+      expect(await qnftSettings.callStatic.mintPriceMultiplier()).to.be.equal(
+        100
+      );
     });
 
     it("Should be able to add/remove mint options", async () => {
       await expect(
-        qnft.connect(user).addMintOption(units(1000), months(1), 20)
+        qnftSettings
+          .connect(user)
+          .addMintOption(units(0), units(1000), months(1), 20)
       ).to.be.revertedWith("Ownable: caller is not the owner");
 
-      expect(await qnft.callStatic.mintOptionsCount()).to.be.equal(0);
-      await qnft.addMintOption(units(0), weeks(1), 0); // 100 qstk, 1 months duration, 20% discount
-      await qnft.addMintOption(units(200), months(2), 30); // 200 qstk, 2 months duration, 30% discount
-      await qnft.addMintOption(units(300), months(3), 40); // 300 qstk, 3 months duration, 40% discount
-      await qnft.addMintOption(units(100), months(1), 20); // 100 qstk, 1 months duration, 20% discount
-      expect(await qnft.callStatic.mintOptionsCount()).to.be.equal(4);
+      expect(await qnftSettings.callStatic.mintOptionsCount()).to.be.equal(0);
+      await qnftSettings.addMintOption(units(0), units(0), weeks(1), 0); // 100 qstk, 1 months duration, 20% discount
+      await qnftSettings.addMintOption(units(0), units(200), months(2), 30); // 200 qstk, 2 months duration, 30% discount
+      await qnftSettings.addMintOption(units(0), units(300), months(3), 40); // 300 qstk, 3 months duration, 40% discount
+      await qnftSettings.addMintOption(units(0), units(100), months(1), 20); // 100 qstk, 1 months duration, 20% discount
+      expect(await qnftSettings.callStatic.mintOptionsCount()).to.be.equal(4);
 
-      await expect(qnft.connect(user).removeMintOption(4)).to.be.revertedWith(
-        "Ownable: caller is not the owner"
+      await expect(
+        qnftSettings.connect(user).removeMintOption(4)
+      ).to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(qnftSettings.removeMintOption(4)).to.be.revertedWith(
+        "QNFTSettings: invalid mint option id"
       );
-      await expect(qnft.removeMintOption(4)).to.be.revertedWith(
-        "QBaseNFT: invalid mint option id"
-      );
 
-      await qnft.removeMintOption(0);
-      expect(await qnft.callStatic.mintOptionsCount()).to.be.equal(3);
+      await qnftSettings.removeMintOption(0);
+      expect(await qnftSettings.callStatic.mintOptionsCount()).to.be.equal(3);
 
-      expect((await qnft.mintOptions(0))[0]).equal(units(100));
-      expect((await qnft.mintOptions(1))[1]).equal(months(2));
-      expect((await qnft.mintOptions(2))[2]).equal(40);
+      expect((await qnftSettings.mintOptions(0))[0]).equal(units(0));
+      expect((await qnftSettings.mintOptions(0))[1]).equal(units(100));
+      expect((await qnftSettings.mintOptions(1))[2]).equal(months(2));
+      expect((await qnftSettings.mintOptions(2))[3]).equal(40);
     });
 
     it("Should be able to add/remove nft images", async () => {
       await expect(
-        qnft.connect(user).addImageSet(units(0.1), nftImages.D)
+        qnftSettings.connect(user).addImageSet(units(0.1), nftImages.D)
       ).to.be.revertedWith("Ownable: caller is not the owner");
 
       await expect(
-        qnft.addImageSet(units(0.1), [...nftImages.D, "invalid"])
-      ).to.be.revertedWith("QBaseNFT: image length does not match");
+        qnftSettings.addImageSet(units(0.1), [...nftImages.D, "invalid"])
+      ).to.be.revertedWith("QNFTSettings: image length does not match");
 
-      expect(await qnft.callStatic.nftImagesCount()).to.be.equal(0);
-      await qnft.addImageSet(units(0.1), nftImages.D);
-      await qnft.addImageSet(units(0.2), nftImages.B);
-      await qnft.addImageSet(units(0.3), nftImages.C);
-      await qnft.addImageSet(units(0.1), nftImages.A);
-      expect(await qnft.callStatic.nftImagesCount()).to.be.equal(4);
+      expect(await qnftSettings.callStatic.nftImagesCount()).to.be.equal(0);
+      await qnftSettings.addImageSet(units(0.1), nftImages.D);
+      await qnftSettings.addImageSet(units(0.2), nftImages.B);
+      await qnftSettings.addImageSet(units(0.3), nftImages.C);
+      await qnftSettings.addImageSet(units(0.1), nftImages.A);
+      expect(await qnftSettings.callStatic.nftImagesCount()).to.be.equal(4);
 
-      await expect(qnft.connect(user).removeImageSet(4)).to.be.revertedWith(
-        "Ownable: caller is not the owner"
+      await expect(
+        qnftSettings.connect(user).removeImageSet(4)
+      ).to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(qnftSettings.removeImageSet(4)).to.be.revertedWith(
+        "QNFTSettings: invalid id"
       );
-      await expect(qnft.removeImageSet(4)).to.be.revertedWith(
-        "QBaseNFT: invalid id"
-      );
 
-      await qnft.removeImageSet(0);
-      expect(await qnft.callStatic.nftImagesCount()).to.be.equal(3);
+      await qnftSettings.removeImageSet(0);
+      expect(await qnftSettings.callStatic.nftImagesCount()).to.be.equal(3);
 
-      expect((await qnft.nftImages(0))[0]).equal(units(0.1));
-      expect((await qnft.nftImages(1))[1]).equal(nftImages.B[0]);
-      expect((await qnft.nftImages(1))[2]).equal(nftImages.B[1]);
-      expect((await qnft.nftImages(1))[3]).equal(nftImages.B[2]);
-      expect((await qnft.nftImages(1))[4]).equal(nftImages.B[3]);
-      expect((await qnft.nftImages(1))[5]).equal(nftImages.B[4]);
+      expect((await qnftSettings.nftImages(0))[0]).equal(units(0.1));
+      expect((await qnftSettings.nftImages(1))[1]).equal(nftImages.B[0]);
+      expect((await qnftSettings.nftImages(1))[2]).equal(nftImages.B[1]);
+      expect((await qnftSettings.nftImages(1))[3]).equal(nftImages.B[2]);
+      expect((await qnftSettings.nftImages(1))[4]).equal(nftImages.B[3]);
+      expect((await qnftSettings.nftImages(1))[5]).equal(nftImages.B[4]);
     });
   });
 });

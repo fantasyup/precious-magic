@@ -13,7 +13,8 @@ contract QNFTSettings is Ownable {
 
     // structs
     struct MintOption {
-        uint256 ownableAmount; // e.g. 0QSTK, 100QSTK, 200QSTK, 300QSTK
+        uint256 minAmount; // e.g. 0QSTK, 100QSTK, 200QSTK, 300QSTK
+        uint256 maxAmount; // e.g. 0QSTK, 100QSTK, 200QSTK, 300QSTK
         uint256 lockDuration; // e.g. 3 months, 6 months, 1 year
         uint256 discount; // percent e.g. 10%, 20%, 30%
     }
@@ -55,7 +56,8 @@ contract QNFTSettings is Ownable {
     );
     event AddMintOption(
         address indexed owner,
-        uint256 ownableAmount,
+        uint256 minAmount,
+        uint256 maxAmount,
         uint256 indexed lockDuration,
         uint256 discount // percent
     );
@@ -87,6 +89,7 @@ contract QNFTSettings is Ownable {
     // mint options set
     uint256 public initialSalePrice;
     uint256 public mintPriceMultiplier; // percent
+    uint256 public mintDiscountRate; // percent
 
     MintOption[] public mintOptions;
     NFTBackgroundImage[] public bgImages;
@@ -119,15 +122,20 @@ contract QNFTSettings is Ownable {
     }
 
     function addMintOption(
-        uint256 _ownableAmount,
+        uint256 _minAmount,
+        uint256 _maxAmount,
         uint256 _lockDuration,
         uint256 _discount
     ) public onlyOwner {
-        mintOptions.push(MintOption(_ownableAmount, _lockDuration, _discount));
+        require(_discount < 100, "invalid discount");
+        mintOptions.push(
+            MintOption(_minAmount, _maxAmount, _lockDuration, _discount)
+        );
 
         emit AddMintOption(
             msg.sender,
-            _ownableAmount,
+            _minAmount,
+            _maxAmount,
             _lockDuration,
             _discount
         );
@@ -136,11 +144,11 @@ contract QNFTSettings is Ownable {
     function removeMintOption(uint256 _mintOptionId) public onlyOwner {
         require(
             IQNFT(qnft).mintStarted() == false,
-            "QBaseNFT: mint already started"
+            "QNFTSettings: mint already started"
         );
 
         uint256 length = mintOptions.length;
-        require(length > _mintOptionId, "QBaseNFT: invalid mint option id");
+        require(length > _mintOptionId, "QNFTSettings: invalid mint option id");
 
         mintOptions[_mintOptionId] = mintOptions[length - 1];
         mintOptions.pop();
@@ -158,7 +166,7 @@ contract QNFTSettings is Ownable {
     {
         require(
             _urls.length == EMOTION_COUNT_PER_NFT,
-            "QBaseNFT: image length does not match"
+            "QNFTSettings: image length does not match"
         );
 
         nftImages.push(
@@ -178,11 +186,11 @@ contract QNFTSettings is Ownable {
     function removeImageSet(uint256 _nftImageId) public onlyOwner {
         require(
             IQNFT(qnft).mintStarted() == false,
-            "QBaseNFT: mint already started"
+            "QNFTSettings: mint already started"
         );
 
         uint256 length = nftImages.length;
-        require(length > _nftImageId, "QBaseNFT: invalid id");
+        require(length > _nftImageId, "QNFTSettings: invalid id");
 
         nftImages[_nftImageId] = nftImages[length - 1];
         nftImages.pop();
@@ -197,7 +205,7 @@ contract QNFTSettings is Ownable {
     function addBgImage(string[] memory _urls) public onlyOwner {
         require(
             _urls.length == BACKGROUND_IMAGE_COUNT,
-            "QBaseNFT: background image length does not match"
+            "QNFTSettings: background image length does not match"
         );
 
         bgImages.push(
@@ -210,11 +218,11 @@ contract QNFTSettings is Ownable {
     function removeBgImage(uint256 _bgImageId) public onlyOwner {
         require(
             IQNFT(qnft).mintStarted() == false,
-            "QBaseNFT: mint already started"
+            "QNFTSettings: mint already started"
         );
 
         uint256 length = bgImages.length;
-        require(length > _bgImageId, "QBaseNFT: invalid id");
+        require(length > _bgImageId, "QNFTSettings: invalid id");
 
         bgImages[_bgImageId] = bgImages[length - 1];
         bgImages.pop();
@@ -240,10 +248,10 @@ contract QNFTSettings is Ownable {
             uint256 mintPrice
         )
     {
-        require(isFavCoin[_name] == false, "QBaseNFT: favcoin not exists");
+        require(isFavCoin[_name] == false, "QNFTSettings: favcoin not exists");
 
         uint256 id = favCoinIds[_name];
-        require(favCoins.length >= id, "QBaseNFT: favcoin not exists");
+        require(favCoins.length >= id, "QNFTSettings: favcoin not exists");
 
         NFTFavCoin memory favCoin = favCoins[id - 1];
 
@@ -269,7 +277,10 @@ contract QNFTSettings is Ownable {
         address _erc20,
         string memory _other
     ) public onlyOwner {
-        require(isFavCoin[_name] == false, "QBaseNFT: favcoin already exists");
+        require(
+            isFavCoin[_name] == false,
+            "QNFTSettings: favcoin already exists"
+        );
 
         favCoins.push(
             NFTFavCoin(
@@ -302,13 +313,13 @@ contract QNFTSettings is Ownable {
     function removeFavCoin(string memory _name) public onlyOwner {
         require(
             IQNFT(qnft).mintStarted() == false,
-            "QBaseNFT: mint already started"
+            "QNFTSettings: mint already started"
         );
 
-        require(isFavCoin[_name] == false, "QBaseNFT: favcoin not exists");
+        require(isFavCoin[_name] == false, "QNFTSettings: favcoin not exists");
 
         uint256 id = favCoinIds[_name] - 1;
-        require(favCoins.length > id, "QBaseNFT: favcoin not exists");
+        require(favCoins.length > id, "QNFTSettings: favcoin not exists");
 
         uint256 last = favCoins.length - 1;
         favCoins[id] = favCoins[last];
@@ -325,26 +336,43 @@ contract QNFTSettings is Ownable {
         uint256 _imageId,
         uint256 _bgImageId,
         uint256 _favCoinId,
-        uint256 _mintOptionId
+        uint256 _mintOptionId,
+        uint256 _mintAmount,
+        uint256 _freeAmount
     ) external view returns (uint256) {
-        require(nftImages.length > _imageId, "QNFT: invalid image option");
+        require(
+            nftImages.length > _imageId,
+            "QNFTSettings: invalid image option"
+        );
         require(
             bgImages.length > _bgImageId,
-            "QNFT: invalid background option"
+            "QNFTSettings: invalid background option"
         );
         require(
             mintOptions.length > _mintOptionId,
-            "QNFT: invalid mint option"
+            "QNFTSettings: invalid mint option"
         );
-        require(favCoins.length > _favCoinId, "QNFT: invalid fav coin");
+        require(
+            mintOptions[_mintOptionId].minAmount <= _mintAmount + _freeAmount &&
+                _mintAmount <= mintOptions[_mintOptionId].maxAmount,
+            "QNFTSettings: invalid mint amount"
+        );
+        require(favCoins.length > _favCoinId, "QNFTSettings: invalid fav coin");
+
+        uint256 mintRate =
+            uint256(100).sub(mintOptions[_mintOptionId].discount);
+
+        if (mintRate > mintDiscountRate) {
+            mintRate = mintDiscountRate;
+        } else {
+            mintRate = 0;
+        }
 
         return
             (
-                initialSalePrice
-                    .mul(mintOptions[_mintOptionId].ownableAmount)
-                    .mul(mintOptions[_mintOptionId].discount)
-                    .div(100)
-                    .add(nftImages[_imageId].mintPrice)
+                initialSalePrice.mul(_mintAmount).mul(mintRate).div(100).add(
+                    nftImages[_imageId].mintPrice
+                )
             )
                 .mul(mintPriceMultiplier)
                 .div(100);
