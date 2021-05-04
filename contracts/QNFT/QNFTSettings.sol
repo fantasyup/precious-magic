@@ -238,17 +238,17 @@ contract QNFTSettings is Ownable {
         public
         view
         returns (
+            uint256 mintPrice,
             string memory name,
             string memory symbol,
             string memory icon,
             string memory website,
             string memory social,
             address erc20,
-            string memory other,
-            uint256 mintPrice
+            string memory other
         )
     {
-        require(isFavCoin[_name] == false, "QNFTSettings: favcoin not exists");
+        require(isFavCoin[_name] == true, "QNFTSettings: favcoin not exists");
 
         uint256 id = favCoinIds[_name];
         require(favCoins.length >= id, "QNFTSettings: favcoin not exists");
@@ -256,14 +256,14 @@ contract QNFTSettings is Ownable {
         NFTFavCoin memory favCoin = favCoins[id - 1];
 
         return (
+            favCoin.mintPrice,
             favCoin.name,
             favCoin.symbol,
             favCoin.icon,
             favCoin.website,
             favCoin.social,
             favCoin.erc20,
-            favCoin.other,
-            favCoin.mintPrice
+            favCoin.other
         );
     }
 
@@ -316,7 +316,7 @@ contract QNFTSettings is Ownable {
             "QNFTSettings: mint already started"
         );
 
-        require(isFavCoin[_name] == false, "QNFTSettings: favcoin not exists");
+        require(isFavCoin[_name] == true, "QNFTSettings: favcoin not exists");
 
         uint256 id = favCoinIds[_name] - 1;
         require(favCoins.length > id, "QNFTSettings: favcoin not exists");
