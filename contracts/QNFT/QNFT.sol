@@ -254,6 +254,9 @@ contract QNFT is Ownable, ERC721 {
             "QNFT: nft count reached the total supply"
         );
 
+        // TODO: should select default image index for listing
+        // TODO: should add field on NFTMeta for this
+
         require(
             msg.value >=
                 settings.calcMintPrice(
