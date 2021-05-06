@@ -544,4 +544,12 @@ contract QNFT is Ownable, ERC721 {
 
         emit SetFoundationWallet(msg.sender, _foundationWallet);
     }
+
+    // TODO: NFT transfer is not implemented
+    // - NFT transfer should change below
+    // 1. Update owner
+    // 2. Update QstkBalance variable
+    // 3. Upate Vote result of NFT transfer
+    // 4. All the other variables that is related to owner
+    // 5. Add tests for all of changes that need to be made from NFT transfer
 }
