@@ -161,6 +161,10 @@ contract QNFT is Ownable, ERC721 {
         emit WithdrawQstk(msg.sender, _amount);
     }
 
+    // TODO: should add getFreeAllocation
+    // TODO: should add maxFreeAllocation and manage free allocation current supply
+    // TODO: should add distributedFreeAllocation
+    
     function addFreeAllocation(address _user, uint256 _amount)
         public
         onlyOwner
