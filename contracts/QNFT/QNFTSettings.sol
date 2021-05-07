@@ -24,6 +24,10 @@ contract QNFTSettings is Ownable {
         string background2;
         string background3;
         string background4;
+        // TODO: move this designer to NFT Image set
+        string designer_name;
+        address designer_address;
+        string designer_meta_info;
     }
     struct NFTArrowImage {
         // global crypto market change - up, normal, down

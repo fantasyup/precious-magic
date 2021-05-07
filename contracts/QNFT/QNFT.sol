@@ -21,7 +21,7 @@ contract QNFT is Ownable, ERC721 {
     // structs
     struct NFTMeta {
         string name; // TODO: NFT should have name
-        string author;
+        string creator_name; // TODO: should name this to creator name
         address creator;
         string color;
         string story;
