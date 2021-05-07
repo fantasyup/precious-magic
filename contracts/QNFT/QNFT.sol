@@ -21,7 +21,7 @@ contract QNFT is Ownable, ERC721 {
     // structs
     struct NFTMeta {
         string name; // TODO: NFT should have name
-        string creator_name; // TODO: should name this to creator name
+        string author; // TODO: should name this to creator_name
         address creator;
         string color;
         string story;
@@ -32,6 +32,7 @@ contract QNFT is Ownable, ERC721 {
         uint256 favCoinId;
         uint256 mintOptionId;
         uint256 mintAmount;
+        uint256 defaultImageIndex;
         uint256 createdAt;
         bool unlocked;
         NFTMeta meta;
@@ -107,6 +108,8 @@ contract QNFT is Ownable, ERC721 {
     uint256 public totalAssignedQstk; // total qstk balance assigned to nfts
     mapping(address => uint256) public qstkBalances;
     mapping(address => uint256) public freeAllocations;
+    uint256 totalFreeAllocations;
+    uint256 distributedFreeAllocations;
 
     // nft
     QNFTSettings settings;
@@ -162,15 +165,12 @@ contract QNFT is Ownable, ERC721 {
         emit WithdrawQstk(msg.sender, _amount);
     }
 
-    // TODO: should add getFreeAllocation
-    // TODO: should add maxFreeAllocation and manage free allocation current supply
-    // TODO: should add distributedFreeAllocation
-    
     function addFreeAllocation(address _user, uint256 _amount)
         public
         onlyOwner
     {
         freeAllocations[_user] = freeAllocations[_user].add(_amount);
+        totalFreeAllocations = totalFreeAllocations.add(_amount);
     }
 
     function removeFreeAllocation(address _user, uint256 _amount)
@@ -178,8 +178,12 @@ contract QNFT is Ownable, ERC721 {
         onlyOwner
     {
         if (freeAllocations[_user] > _amount) {
+            totalFreeAllocations = totalFreeAllocations.sub(_amount);
             freeAllocations[_user] = freeAllocations[_user].sub(_amount);
         } else {
+            totalFreeAllocations = totalFreeAllocations.sub(
+                freeAllocations[_user]
+            );
             freeAllocations[_user] = 0;
         }
     }
@@ -244,6 +248,8 @@ contract QNFT is Ownable, ERC721 {
         uint256 _favCoinId,
         uint256 _mintOptionId,
         uint256 _mintAmount,
+        uint256 _defaultImageIndex,
+        string memory _name,
         string memory _author,
         string memory _color,
         string memory _story
@@ -254,8 +260,7 @@ contract QNFT is Ownable, ERC721 {
             "QNFT: nft count reached the total supply"
         );
 
-        // TODO: should select default image index for listing
-        // TODO: should add field on NFTMeta for this
+        require(_defaultImageIndex < 5, "QNFT: invalid image index");
 
         require(
             msg.value >=
@@ -289,14 +294,23 @@ contract QNFT is Ownable, ERC721 {
             _bgImageId,
             _mintOptionId,
             qstkAmount,
+            _defaultImageIndex,
             block.timestamp,
             false,
-            NFTMeta(_author, msg.sender, _color, _story)
+            NFTMeta(_name, _author, msg.sender, _color, _story)
         );
         _setNftId(_imageId, _bgImageId, _favCoinId, _mintOptionId, nftCount);
 
         totalAssignedQstk = totalAssignedQstk.add(qstkAmount);
         qstkBalances[msg.sender] = qstkBalances[msg.sender].add(qstkAmount);
+
+        // calculate free allocations
+        distributedFreeAllocations = distributedFreeAllocations.add(
+            freeAllocations[msg.sender]
+        );
+        totalFreeAllocations = totalFreeAllocations.sub(
+            freeAllocations[msg.sender]
+        );
         freeAllocations[msg.sender] = 0;
 
         // transfer to foundation wallet
@@ -548,11 +562,33 @@ contract QNFT is Ownable, ERC721 {
         emit SetFoundationWallet(msg.sender, _foundationWallet);
     }
 
-    // TODO: NFT transfer is not implemented
-    // - NFT transfer should change below
-    // 1. Update owner
-    // 2. Update QstkBalance variable
-    // 3. Upate Vote result of NFT transfer
-    // 4. All the other variables that is related to owner
-    // 5. Add tests for all of changes that need to be made from NFT transfer
+    // transfer NFT
+    function _transfer(
+        address from,
+        address to,
+        uint256 tokenId
+    ) internal override {
+        super._transfer(from, to, tokenId);
+
+        uint256 qstkAmount = nftData[tokenId].mintAmount;
+
+        // Update QstkBalance
+        qstkBalances[to] = qstkBalances[to].add(qstkAmount);
+        qstkBalances[from] = qstkBalances[from].sub(qstkAmount);
+
+        // Vote result
+        if (voteAddress[from] != address(0x0)) {
+            voteWeightsByAddress[from] = voteWeightsByAddress[from].sub(
+                qstkAmount
+            );
+            voteWeights[voteAddress[msg.sender]] = voteWeights[
+                voteAddress[msg.sender]
+            ]
+                .sub(qstkAmount);
+
+            if (voteWeightsByAddress[from] == 0) {
+                voteAddress[from] = address(0x0);
+            }
+        }
+    }
 }

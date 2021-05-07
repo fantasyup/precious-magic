@@ -89,6 +89,7 @@ contract QNFTSettings is Ownable {
     uint256 public constant ARROW_IMAGE_COUNT = 3;
     uint256 public constant DEFAULT_IMAGE_PRICE = 0.006 ether;
     uint256 public constant DEFAULT_COIN_PRICE = 0.004 ether;
+    uint256 public constant PERCENT_MAX = 100;
 
     // mint options set
     uint256 public initialSalePrice;
@@ -100,7 +101,6 @@ contract QNFTSettings is Ownable {
     NFTArrowImage public arrowImage;
     NFTImage[] public nftImages;
     NFTFavCoin[] public favCoins;
-    mapping(string => bool) public isFavCoin;
     mapping(string => uint256) internal favCoinIds;
 
     address qnft;
@@ -108,7 +108,7 @@ contract QNFTSettings is Ownable {
     constructor() {
         // mint
         initialSalePrice = 0.00001 ether;
-        mintPriceMultiplier = 100; // 100%
+        mintPriceMultiplier = PERCENT_MAX; // 100%
     }
 
     // mint
@@ -131,7 +131,7 @@ contract QNFTSettings is Ownable {
         uint256 _lockDuration,
         uint256 _discount
     ) public onlyOwner {
-        require(_discount < 100, "invalid discount");
+        require(_discount < PERCENT_MAX, "QNFTSettings: invalid discount");
         mintOptions.push(
             MintOption(_minAmount, _maxAmount, _lockDuration, _discount)
         );
@@ -238,6 +238,10 @@ contract QNFTSettings is Ownable {
         return favCoins.length;
     }
 
+    function isFavCoin(string memory _name) public view returns (bool) {
+        return favCoinIds[_name] != 0;
+    }
+
     function favCoinFromName(string memory _name)
         public
         view
@@ -252,10 +256,8 @@ contract QNFTSettings is Ownable {
             string memory other
         )
     {
-        require(isFavCoin[_name] == true, "QNFTSettings: favcoin not exists");
-
         uint256 id = favCoinIds[_name];
-        require(favCoins.length >= id, "QNFTSettings: favcoin not exists");
+        require(id != 0, "QNFTSettings: favcoin not exists");
 
         NFTFavCoin memory favCoin = favCoins[id - 1];
 
@@ -281,10 +283,7 @@ contract QNFTSettings is Ownable {
         address _erc20,
         string memory _other
     ) public onlyOwner {
-        require(
-            isFavCoin[_name] == false,
-            "QNFTSettings: favcoin already exists"
-        );
+        require(favCoinIds[_name] == 0, "QNFTSettings: favcoin already exists");
 
         favCoins.push(
             NFTFavCoin(
@@ -299,7 +298,6 @@ contract QNFTSettings is Ownable {
             )
         );
         favCoinIds[_name] = favCoins.length;
-        isFavCoin[_name] = true;
 
         emit AddFavCoin(
             msg.sender,
@@ -320,16 +318,13 @@ contract QNFTSettings is Ownable {
             "QNFTSettings: mint already started"
         );
 
-        require(isFavCoin[_name] == true, "QNFTSettings: favcoin not exists");
-
-        uint256 id = favCoinIds[_name] - 1;
-        require(favCoins.length > id, "QNFTSettings: favcoin not exists");
+        uint256 id = favCoinIds[_name];
+        require(id != 0, "QNFTSettings: favcoin not exists");
 
         uint256 last = favCoins.length - 1;
-        favCoins[id] = favCoins[last];
-        favCoinIds[favCoins[id].name] = favCoinIds[_name];
+        favCoins[id - 1] = favCoins[last];
+        favCoinIds[favCoins[id - 1].name] = favCoinIds[_name];
         favCoinIds[_name] = 0;
-        isFavCoin[_name] = false;
 
         favCoins.pop();
 
@@ -356,35 +351,57 @@ contract QNFTSettings is Ownable {
             mintOptions.length > _mintOptionId,
             "QNFTSettings: invalid mint option"
         );
+
+        MintOption memory mintOption = mintOptions[_mintOptionId];
+
         require(
-            mintOptions[_mintOptionId].minAmount <= _mintAmount + _freeAmount &&
-                _mintAmount <= mintOptions[_mintOptionId].maxAmount,
+            mintOption.minAmount <= _mintAmount + _freeAmount &&
+                _mintAmount <= mintOption.maxAmount,
             "QNFTSettings: invalid mint amount"
         );
         require(favCoins.length > _favCoinId, "QNFTSettings: invalid fav coin");
 
-        uint256 mintRate =
-            uint256(100).sub(mintOptions[_mintOptionId].discount);
+        // mintPrice = (initialSalePrice * mintAmount * discountRate + (imageMintPrice + favCoinMintPrice)) * mintMultiplier
+        uint256 discountRate = getDiscountRate(mintOption.discount);
+        uint256 qstkPrice =
+            initialSalePrice.mul(_mintAmount).mul(discountRate).div(10**18).div(
+                PERCENT_MAX
+            );
+        uint256 mintPrice =
+            qstkPrice.add(nftImages[_imageId].mintPrice).add(
+                favCoins[_favCoinId].mintPrice
+            );
 
-        if (mintRate > mintDiscountRate) {
-            mintRate = mintDiscountRate;
-        } else {
-            mintRate = 0;
-        }
-
-        return
-            (
-                initialSalePrice.mul(_mintAmount).mul(mintRate).div(100).add(
-                    nftImages[_imageId].mintPrice
-                )
-            )
-                .mul(mintPriceMultiplier)
-                .div(100);
+        return mintPrice.mul(mintPriceMultiplier).div(PERCENT_MAX);
     }
 
     function setQNft(address _qnft) public onlyOwner {
         require(qnft != _qnft, "QNFTSettings: QNFT already set");
 
         qnft = _qnft;
+    }
+
+    function setMintDiscountRate(uint256 _mintDiscountRate) public onlyOwner {
+        require(
+            _mintDiscountRate < PERCENT_MAX,
+            "QNFTSettings: invalid discount rate"
+        );
+        mintDiscountRate = _mintDiscountRate;
+    }
+
+    // internal functions
+
+    function getDiscountRate(uint256 _discount)
+        internal
+        view
+        returns (uint256)
+    {
+        uint256 discount = _discount.add(mintDiscountRate);
+
+        if (discount > PERCENT_MAX) {
+            return 0;
+        } else {
+            return PERCENT_MAX.sub(discount);
+        }
     }
 }
