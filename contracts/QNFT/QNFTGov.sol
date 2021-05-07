@@ -37,6 +37,7 @@ contract QNFTGov is Ownable, ReentrancyGuard {
 
     // constants
     uint256 public constant VOTE_QUORUM = 50; // 50%
+    uint256 public constant PERCENT_MAX = 100;
 
     // vote options
     mapping(address => uint256) voteWeights; // vote amount of give multisig wallet
@@ -85,7 +86,7 @@ contract QNFTGov is Ownable, ReentrancyGuard {
 
         require(
             voteWeights[multisig] >=
-                qnft.totalAssignedQstk().mul(VOTE_QUORUM).div(100),
+                qnft.totalAssignedQstk().mul(VOTE_QUORUM).div(PERCENT_MAX),
             "QNFTGov: specified multisig address is not voted enough"
         );
 

@@ -94,6 +94,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
     uint256 public constant FOUNDATION_PERCENTAGE = 30; // 30%
     uint256 public constant MIN_VOTE_DURATION = 604800; // 1 week
     uint256 public constant SAFE_VOTE_END_DURATION = 1814400; // 3 weeks
+    uint256 public constant PERCENT_MAX = 100;
 
     // qstk
     address public qstk;
@@ -325,7 +326,6 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         require(!mintPaused, "QNFT: mint paused");
         require(!mintFinished(), "QNFT: mint finished");
 
-        // todo check mintPaused or nftsale ended
         require(
             nftCount < totalSupply,
             "QNFT: nft count reached the total supply"
@@ -394,7 +394,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         freeAllocations[msg.sender] = 0;
 
         // transfer to foundation wallet
-        _transferFoundation(msg.value.mul(FOUNDATION_PERCENTAGE).div(100));
+        _transferFoundation(
+            msg.value.mul(FOUNDATION_PERCENTAGE).div(PERCENT_MAX)
+        );
 
         _mint(address(this), nftCount);
 
@@ -435,7 +437,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         nftData[_nftId].imageId = _imageId;
 
         // transfer to foundation wallet
-        _transferFoundation(msg.value.mul(FOUNDATION_PERCENTAGE).div(100));
+        _transferFoundation(
+            msg.value.mul(FOUNDATION_PERCENTAGE).div(PERCENT_MAX)
+        );
 
         emit UpgradeNftImage(msg.sender, _nftId, oldImageId, _imageId);
     }
@@ -484,7 +488,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         nftData[_nftId].favCoinId = _favCoinId;
 
         // transfer to foundation wallet
-        _transferFoundation(msg.value.mul(FOUNDATION_PERCENTAGE).div(100));
+        _transferFoundation(
+            msg.value.mul(FOUNDATION_PERCENTAGE).div(PERCENT_MAX)
+        );
 
         emit UpgradeNftCoin(msg.sender, _nftId, oldFavCoinId, _favCoinId);
     }
