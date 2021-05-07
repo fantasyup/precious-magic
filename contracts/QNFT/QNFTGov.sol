@@ -39,9 +39,9 @@ contract QNFTGov is Ownable, ReentrancyGuard {
     uint256 public constant VOTE_QUORUM = 50; // 50%
 
     // vote options
-    mapping(address => uint256) voteWeights;
-    mapping(address => address) voteAddress;
-    mapping(address => uint256) voteWeightsByAddress;
+    mapping(address => uint256) voteWeights; // vote amount of give multisig wallet
+    mapping(address => address) voteAddress; // vote address of given user
+    mapping(address => uint256) voteWeightsByAddress; // vote amoutn of given user
 
     IQNFT qnft;
 
@@ -52,6 +52,9 @@ contract QNFTGov is Ownable, ReentrancyGuard {
 
     constructor() {}
 
+    /**
+     * @dev votes on a given multisig wallet with the locked qstk balance of the user
+     */
     function voteGovernanceAddress(address multisig) public {
         require(qnft.mintFinished(), "QNFTGov: NFT sale not ended");
 
@@ -71,6 +74,9 @@ contract QNFTGov is Ownable, ReentrancyGuard {
         emit VoteGovernanceAddress(msg.sender, multisig, qstkAmount);
     }
 
+    /**
+     * @dev withdraws to the governance address if it has enough vote amount
+     */
     function withdrawToGovernanceAddress(address payable multisig)
         public
         nonReentrant
@@ -90,6 +96,9 @@ contract QNFTGov is Ownable, ReentrancyGuard {
         emit WithdrawToGovernanceAddress(msg.sender, multisig, amount);
     }
 
+    /**
+     * @dev withdraws to multisig wallet by owner - need to pass the safe vote end duration
+     */
     function safeWithdraw(address payable multisig)
         public
         onlyOwner
@@ -107,15 +116,21 @@ contract QNFTGov is Ownable, ReentrancyGuard {
         emit SafeWithdraw(msg.sender, multisig, amount);
     }
 
+    /**
+     * @dev updates the votes amount of the given user
+     */
     function updateVoteAmount(
         address user,
         uint256 originAmount,
         uint256 newAmount
     ) public onlyQnft {
         if (voteAddress[user] != address(0x0)) {
+            // just updates the vote amount if the user has previous vote.
+
             voteWeightsByAddress[user] = voteWeightsByAddress[user]
                 .sub(originAmount)
                 .add(newAmount);
+
             voteWeights[voteAddress[msg.sender]] = voteWeights[
                 voteAddress[msg.sender]
             ]
@@ -128,6 +143,9 @@ contract QNFTGov is Ownable, ReentrancyGuard {
         }
     }
 
+    /**
+     * @dev sets QNFT contract address
+     */
     function setQNft(IQNFT _qnft) public onlyOwner {
         require(qnft != _qnft, "QNFTSettings: QNFT already set");
 
