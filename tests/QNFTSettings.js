@@ -17,7 +17,7 @@ const {
 chai.use(solidity);
 
 describe("QNFTSettings", () => {
-  let qstk, qnft, qnftSettings;
+  let qstk, qnft, qnftSettings, qnftGov;
   let deployer, foundation, user;
 
   before(async () => {
@@ -34,10 +34,15 @@ describe("QNFTSettings", () => {
     qnftSettings = await QNFTSettingsFactory.deploy();
     await qnftSettings.deployed();
 
+    const QNFTGovFactory = await ethers.getContractFactory("QNFTGov");
+    qnftGov = await QNFTGovFactory.deploy();
+    await qnftGov.deployed();
+
     const QNFTFactory = await ethers.getContractFactory("QNFT");
     qnft = await QNFTFactory.deploy(
       qstk.address,
       qnftSettings.address,
+      qnftGov.address,
       foundation.address
     );
     await qnft.deployed();
@@ -115,15 +120,27 @@ describe("QNFTSettings", () => {
       expect((await qnftSettings.mintOptions(2))[3]).equal(
         mintOptions.C.discount
       );
+      await expect(qnftSettings.mintOptionLockDuration(4)).to.be.revertedWith(
+        "QNFTSettings: invalid mint option"
+      );
+      expect(await qnftSettings.mintOptionLockDuration(0)).to.be.equal(
+        mintOptions.A.lockDuration
+      );
     });
 
     it("Should be able to add/remove nft images", async () => {
       await expect(
-        qnftSettings.connect(user).addImageSet(units(0.1), nftImages.D.urls)
+        qnftSettings.connect(user).addImageSet(...Object.values(nftImages.D))
       ).to.be.revertedWith("Ownable: caller is not the owner");
 
       await expect(
-        qnftSettings.addImageSet(units(0.1), [...nftImages.D.urls, "invalid"])
+        qnftSettings.addImageSet(
+          units(0.1),
+          [...nftImages.D.urls, "invalid"],
+          nftImages.D.designer_name,
+          nftImages.D.designer_wallet,
+          nftImages.D.designer_meta
+        )
       ).to.be.revertedWith("QNFTSettings: image length does not match");
 
       expect(await qnftSettings.callStatic.nftImagesCount()).to.be.equal(0);
@@ -149,6 +166,13 @@ describe("QNFTSettings", () => {
       expect((await qnftSettings.nftImages(1))[3]).equal(nftImages.B.urls[2]);
       expect((await qnftSettings.nftImages(1))[4]).equal(nftImages.B.urls[3]);
       expect((await qnftSettings.nftImages(1))[5]).equal(nftImages.B.urls[4]);
+
+      await expect(qnftSettings.nftImageMintPrice(4)).to.be.revertedWith(
+        "QNFTSettings: invalid image id"
+      );
+      expect(await qnftSettings.nftImageMintPrice(0)).to.be.equal(
+        nftImages.A.mintPrice
+      );
     });
 
     it("Should be able to add/remove background images", async () => {
@@ -239,6 +263,13 @@ describe("QNFTSettings", () => {
       );
       expect((await qnftSettings.favCoinFromName(favCoins.C.name))[7]).equal(
         favCoins.C.other
+      );
+
+      await expect(qnftSettings.favCoinMintPrice(4)).to.be.revertedWith(
+        "QNFTSettings: invalid favcoin id"
+      );
+      expect(await qnftSettings.favCoinMintPrice(0)).to.be.equal(
+        favCoins.A.mintPrice
       );
     });
 

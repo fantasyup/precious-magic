@@ -3,12 +3,14 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+
 import "../interface/IQNFT.sol";
+import "../interface/IQNFTSettings.sol";
 
 /**
  * @author fantasy
  */
-contract QNFTSettings is Ownable {
+contract QNFTSettings is Ownable, IQNFTSettings {
     using SafeMath for uint256;
 
     // structs
@@ -24,16 +26,17 @@ contract QNFTSettings is Ownable {
         string background2;
         string background3;
         string background4;
-        // TODO: move this designer to NFT Image set
-        string designer_name;
-        address designer_address;
-        string designer_meta_info;
     }
     struct NFTArrowImage {
         // global crypto market change - up, normal, down
         string image1;
         string image2;
         string image3;
+    }
+    struct NFTImageDesigner {
+        string name;
+        address wallet;
+        string meta_info;
     }
     struct NFTImage {
         uint256 mintPrice;
@@ -42,6 +45,7 @@ contract QNFTSettings is Ownable {
         string emotion3;
         string emotion4;
         string emotion5;
+        NFTImageDesigner designer;
     }
     struct NFTFavCoin {
         uint256 mintPrice;
@@ -103,7 +107,7 @@ contract QNFTSettings is Ownable {
     NFTFavCoin[] public favCoins;
     mapping(string => uint256) internal favCoinIds;
 
-    address qnft;
+    IQNFT qnft;
 
     constructor() {
         // mint
@@ -121,8 +125,22 @@ contract QNFTSettings is Ownable {
         emit SetMintPriceMultiplier(msg.sender, mintPriceMultiplier);
     }
 
-    function mintOptionsCount() public view returns (uint256) {
+    function mintOptionsCount() public view override returns (uint256) {
         return mintOptions.length;
+    }
+
+    function mintOptionLockDuration(uint256 _mintOptionId)
+        public
+        view
+        override
+        returns (uint256)
+    {
+        require(
+            _mintOptionId < mintOptions.length,
+            "QNFTSettings: invalid mint option"
+        );
+
+        return mintOptions[_mintOptionId].lockDuration;
     }
 
     function addMintOption(
@@ -147,7 +165,7 @@ contract QNFTSettings is Ownable {
 
     function removeMintOption(uint256 _mintOptionId) public onlyOwner {
         require(
-            IQNFT(qnft).mintStarted() == false,
+            qnft.mintStarted() == false,
             "QNFTSettings: mint already started"
         );
 
@@ -160,14 +178,30 @@ contract QNFTSettings is Ownable {
         emit RemoveMintOption(msg.sender, _mintOptionId);
     }
 
-    function nftImagesCount() public view returns (uint256) {
+    function nftImagesCount() public view override returns (uint256) {
         return nftImages.length;
     }
 
-    function addImageSet(uint256 _mintPrice, string[] memory _urls)
+    function nftImageMintPrice(uint256 _nftImageId)
         public
-        onlyOwner
+        view
+        override
+        returns (uint256)
     {
+        require(
+            _nftImageId < nftImages.length,
+            "QNFTSettings: invalid image id"
+        );
+        return nftImages[_nftImageId].mintPrice;
+    }
+
+    function addImageSet(
+        uint256 _mintPrice,
+        string[] memory _urls,
+        string memory _designer_name,
+        address _designer_wallet,
+        string memory _designer_meta
+    ) public onlyOwner {
         require(
             _urls.length == EMOTION_COUNT_PER_NFT,
             "QNFTSettings: image length does not match"
@@ -180,7 +214,12 @@ contract QNFTSettings is Ownable {
                 _urls[1],
                 _urls[2],
                 _urls[3],
-                _urls[4]
+                _urls[4],
+                NFTImageDesigner(
+                    _designer_name,
+                    _designer_wallet,
+                    _designer_meta
+                )
             )
         );
 
@@ -189,7 +228,7 @@ contract QNFTSettings is Ownable {
 
     function removeImageSet(uint256 _nftImageId) public onlyOwner {
         require(
-            IQNFT(qnft).mintStarted() == false,
+            qnft.mintStarted() == false,
             "QNFTSettings: mint already started"
         );
 
@@ -202,7 +241,7 @@ contract QNFTSettings is Ownable {
         emit RemoveImageSet(msg.sender, _nftImageId);
     }
 
-    function bgImagesCount() public view returns (uint256) {
+    function bgImagesCount() public view override returns (uint256) {
         return bgImages.length;
     }
 
@@ -221,7 +260,7 @@ contract QNFTSettings is Ownable {
 
     function removeBgImage(uint256 _bgImageId) public onlyOwner {
         require(
-            IQNFT(qnft).mintStarted() == false,
+            qnft.mintStarted() == false,
             "QNFTSettings: mint already started"
         );
 
@@ -234,8 +273,22 @@ contract QNFTSettings is Ownable {
         emit RemoveBgImage(msg.sender, _bgImageId);
     }
 
-    function favCoinsCount() public view returns (uint256) {
+    function favCoinsCount() public view override returns (uint256) {
         return favCoins.length;
+    }
+
+    function favCoinMintPrice(uint256 _favCoinId)
+        public
+        view
+        override
+        returns (uint256)
+    {
+        require(
+            _favCoinId < favCoins.length,
+            "QNFTSettings: invalid favcoin id"
+        );
+
+        return favCoins[_favCoinId].mintPrice;
     }
 
     function isFavCoin(string memory _name) public view returns (bool) {
@@ -314,7 +367,7 @@ contract QNFTSettings is Ownable {
 
     function removeFavCoin(string memory _name) public onlyOwner {
         require(
-            IQNFT(qnft).mintStarted() == false,
+            qnft.mintStarted() == false,
             "QNFTSettings: mint already started"
         );
 
@@ -338,7 +391,7 @@ contract QNFTSettings is Ownable {
         uint256 _mintOptionId,
         uint256 _mintAmount,
         uint256 _freeAmount
-    ) external view returns (uint256) {
+    ) public view override returns (uint256) {
         require(
             nftImages.length > _imageId,
             "QNFTSettings: invalid image option"
@@ -375,7 +428,7 @@ contract QNFTSettings is Ownable {
         return mintPrice.mul(mintPriceMultiplier).div(PERCENT_MAX);
     }
 
-    function setQNft(address _qnft) public onlyOwner {
+    function setQNft(IQNFT _qnft) public onlyOwner {
         require(qnft != _qnft, "QNFTSettings: QNFT already set");
 
         qnft = _qnft;

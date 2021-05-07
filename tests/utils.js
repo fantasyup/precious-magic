@@ -10,18 +10,30 @@ const nftImages = {
   A: {
     mintPrice: units(0.1),
     urls: ["A1", "A2", "A3", "A4", "A5"],
+    designer_name: "A-name",
+    designer_wallet: "0x0000000000000000000000000000000000000000",
+    designer_meta: "A-meta",
   },
   B: {
     mintPrice: units(0.2),
     urls: ["B1", "B2", "B3", "B4", "B5"],
+    designer_name: "B-name",
+    designer_wallet: "0x0000000000000000000000000000000000000001",
+    designer_meta: "B-meta",
   },
   C: {
     mintPrice: units(0.3),
     urls: ["C1", "C2", "C3", "C4", "C5"],
+    designer_name: "C-name",
+    designer_wallet: "0x0000000000000000000000000000000000000002",
+    designer_meta: "C-meta",
   },
   D: {
     mintPrice: units(0.4),
     urls: ["D1", "D2", "D3", "D4", "D5"],
+    designer_name: "D-name",
+    designer_wallet: "0x0000000000000000000000000000000000000003",
+    designer_meta: "D-meta",
   },
 };
 

@@ -5,24 +5,28 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "solidity-bytes-utils/contracts/BytesLib.sol";
 
-import "./QNFTSettings.sol";
+import "../interface/IQNFTGov.sol";
+import "../interface/IQNFTSettings.sol";
 
 /**
  * @author fantasy
  */
-contract QNFT is Ownable, ERC721 {
+contract QNFT is Ownable, ERC721, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
     using BytesLib for bytes;
 
     // structs
+    struct NFTCreator {
+        string name;
+        address wallet;
+    }
     struct NFTMeta {
-        string name; // TODO: NFT should have name
-        string author; // TODO: should name this to creator_name
-        address creator;
+        string name;
         string color;
         string story;
     }
@@ -36,6 +40,7 @@ contract QNFT is Ownable, ERC721 {
         uint256 createdAt;
         bool unlocked;
         NFTMeta meta;
+        NFTCreator creator;
     }
 
     // events
@@ -52,7 +57,7 @@ contract QNFT is Ownable, ERC721 {
         uint256 bgImageId,
         uint256 favCoinId,
         uint256 mintOptionId,
-        string author,
+        string creator_name,
         string color,
         string story
     );
@@ -79,29 +84,13 @@ contract QNFT is Ownable, ERC721 {
         uint256 indexed nftId,
         uint256 amount
     );
-    event VoteGovernanceAddress(
-        address indexed voter,
-        address indexed multisig,
-        uint256 amount
-    );
-    event WithdrawToGovernanceAddress(
-        address indexed user,
-        address indexed multisig,
-        uint256 amount
-    );
-    event SafeWithdraw(
-        address indexed owner,
-        address indexed ultisig,
-        uint256 amount
-    );
     event SetFoundationWallet(address indexed owner, address wallet);
 
     // constants
     uint256 public constant NFT_SALE_DURATION = 1209600; // 2 weeks
-    uint256 public constant FOUNDATION_PERCENTAGE = 40; // 40%
+    uint256 public constant FOUNDATION_PERCENTAGE = 30; // 30%
     uint256 public constant MIN_VOTE_DURATION = 604800; // 1 week
     uint256 public constant SAFE_VOTE_END_DURATION = 1814400; // 3 weeks
-    uint256 public constant VOTE_QUORUM = 50; // 50%
 
     // qstk
     address public qstk;
@@ -112,7 +101,8 @@ contract QNFT is Ownable, ERC721 {
     uint256 distributedFreeAllocations;
 
     // nft
-    QNFTSettings settings;
+    IQNFTSettings settings;
+    IQNFTGov governance;
     uint256 public totalSupply; // maximum mintable nft count
     mapping(uint256 => NFTData) public nftData;
     mapping(uint256 => uint256) private nftId;
@@ -123,21 +113,18 @@ contract QNFT is Ownable, ERC721 {
     uint256 public mintStartTime;
     bool public mintPaused;
 
-    // vote options
-    mapping(address => uint256) voteWeights;
-    mapping(address => address) voteAddress;
-    mapping(address => uint256) voteWeightsByAddress;
-
     // foundation
     address payable public foundationWallet;
 
     constructor(
         address _qstk,
-        QNFTSettings _settings,
+        IQNFTSettings _settings,
+        IQNFTGov _governance,
         address payable _foundationWallet
     ) ERC721("Quiver NFT", "QNFT") {
         qstk = _qstk;
         settings = _settings;
+        governance = _governance;
 
         // foundation
         foundationWallet = _foundationWallet;
@@ -188,7 +175,8 @@ contract QNFT is Ownable, ERC721 {
         }
     }
 
-    // nft
+    // NFT
+
     function circulatingSupply() public view returns (uint256) {
         return nftCount;
     }
@@ -207,6 +195,11 @@ contract QNFT is Ownable, ERC721 {
     }
 
     function startMint() public onlyOwner {
+        require(
+            mintStarted == false || mintFinished(),
+            "QNFT: mint in progress"
+        );
+
         mintStarted = true;
         mintStartTime = block.timestamp;
 
@@ -214,8 +207,8 @@ contract QNFT is Ownable, ERC721 {
     }
 
     function pauseMint() public onlyOwner {
-        require(mintStarted == true, "QBaseNFT: mint not started");
-        require(mintPaused == false, "QBaseNFT: mint already paused");
+        require(mintStarted == true, "QNFT: mint not started");
+        require(mintPaused == false, "QNFT: mint already paused");
 
         mintPaused = true;
 
@@ -223,15 +216,40 @@ contract QNFT is Ownable, ERC721 {
     }
 
     function unPauseMint() public onlyOwner {
-        require(mintStarted == true, "QBaseNFT: mint not started");
-        require(mintPaused == true, "QBaseNFT: mint not paused");
+        require(mintStarted == true, "QNFT: mint not started");
+        require(mintPaused == true, "QNFT: mint not paused");
 
         mintPaused = false;
 
         emit UnpauseMint(msg.sender, block.timestamp);
     }
 
-    function isNftMinted(
+    // Check if NFT mint process is finished.
+    function mintFinished() public view returns (bool) {
+        require(mintStarted, "QNFT: mint not started");
+
+        return mintStartTime.add(NFT_SALE_DURATION) <= block.timestamp;
+    }
+
+    // Check if min vote duration is passed.
+    function minVoteDurationPassed() public view returns (bool) {
+        require(mintFinished(), "QNFT: NFT sale not ended");
+
+        return
+            mintStartTime.add(NFT_SALE_DURATION).add(MIN_VOTE_DURATION) <=
+            block.timestamp;
+    }
+
+    // Check if safe vote end duration is passed
+    function safeVoteEndDurationPassed() public view returns (bool) {
+        require(minVoteDurationPassed(), "QNFT: wait until safe vote end time");
+
+        return
+            mintStartTime.add(NFT_SALE_DURATION).add(SAFE_VOTE_END_DURATION) <=
+            block.timestamp;
+    }
+
+    function nftMinted(
         uint256 _imageId,
         uint256 _bgImageId,
         uint256 _favCoinId,
@@ -250,11 +268,15 @@ contract QNFT is Ownable, ERC721 {
         uint256 _mintAmount,
         uint256 _defaultImageIndex,
         string memory _name,
-        string memory _author,
+        string memory _creator_name,
         string memory _color,
         string memory _story
     ) public payable {
-        require(mintStarted == true, "QNFT: mint not started");
+        require(mintStarted, "QNFT: mint not started");
+        require(!mintPaused, "QNFT: mint paused");
+        require(!mintFinished(), "QNFT: mint finished");
+
+        // todo check mintPaused or nftsale ended
         require(
             nftCount < totalSupply,
             "QNFT: nft count reached the total supply"
@@ -283,7 +305,7 @@ contract QNFT is Ownable, ERC721 {
         );
 
         require(
-            !isNftMinted(_imageId, _bgImageId, _favCoinId, _mintOptionId),
+            !nftMinted(_imageId, _bgImageId, _favCoinId, _mintOptionId),
             "QNFT: nft already exists"
         );
 
@@ -297,12 +319,21 @@ contract QNFT is Ownable, ERC721 {
             _defaultImageIndex,
             block.timestamp,
             false,
-            NFTMeta(_name, _author, msg.sender, _color, _story)
+            NFTMeta(_name, _color, _story),
+            NFTCreator(_creator_name, msg.sender)
         );
         _setNftId(_imageId, _bgImageId, _favCoinId, _mintOptionId, nftCount);
 
         totalAssignedQstk = totalAssignedQstk.add(qstkAmount);
-        qstkBalances[msg.sender] = qstkBalances[msg.sender].add(qstkAmount);
+
+        uint256 originAmount = qstkBalances[msg.sender];
+        qstkBalances[msg.sender] = originAmount.add(qstkAmount);
+
+        governance.updateVoteAmount(
+            msg.sender,
+            originAmount,
+            qstkBalances[msg.sender]
+        );
 
         // calculate free allocations
         distributedFreeAllocations = distributedFreeAllocations.add(
@@ -325,7 +356,7 @@ contract QNFT is Ownable, ERC721 {
             _bgImageId,
             _favCoinId,
             _mintOptionId,
-            _author,
+            _creator_name,
             _color,
             _story
         );
@@ -342,7 +373,7 @@ contract QNFT is Ownable, ERC721 {
             "QNFT: invalid image id"
         );
 
-        (uint256 mintPrice, , , , , ) = settings.nftImages(_imageId);
+        uint256 mintPrice = settings.nftImageMintPrice(_imageId);
         require(
             msg.value >= mintPrice,
             "QNFT: insufficient image upgrade price"
@@ -357,10 +388,7 @@ contract QNFT is Ownable, ERC721 {
         emit UpgradeNftImage(msg.sender, _nftId, oldImageId, _imageId);
     }
 
-    function upgradeNftBackground(uint256 _nftId, uint256 _bgImageId)
-        public
-        payable
-    {
+    function upgradeNftBackground(uint256 _nftId, uint256 _bgImageId) public {
         require(
             _nftId != uint256(0) && nftCount >= _nftId,
             "QNFT: invalid nft id"
@@ -388,7 +416,7 @@ contract QNFT is Ownable, ERC721 {
             "QNFT: invalid image id"
         );
 
-        (uint256 mintPrice, , , , , , , ) = settings.favCoins(_favCoinId);
+        uint256 mintPrice = settings.favCoinMintPrice(_favCoinId);
         require(
             msg.value >= mintPrice,
             "QNFT: insufficient coin upgrade price"
@@ -403,7 +431,7 @@ contract QNFT is Ownable, ERC721 {
         emit UpgradeNftCoin(msg.sender, _nftId, oldFavCoinId, _favCoinId);
     }
 
-    function unlockQstkFromNft(uint256 _nftId) public {
+    function unlockQstkFromNft(uint256 _nftId) public nonReentrant {
         require(
             _nftId != uint256(0) && nftCount >= _nftId,
             "QNFT: invalid nft id"
@@ -411,7 +439,8 @@ contract QNFT is Ownable, ERC721 {
         require(ownerOf(_nftId) == msg.sender, "QNFT: invalid owner");
 
         NFTData storage item = nftData[_nftId];
-        (, , uint256 lockDuration, ) = settings.mintOptions(item.mintOptionId);
+        uint256 lockDuration =
+            settings.mintOptionLockDuration(item.mintOptionId);
 
         require(item.unlocked == false, "QNFT: already unlocked");
         require(
@@ -427,80 +456,6 @@ contract QNFT is Ownable, ERC721 {
         item.unlocked = true;
 
         emit UnlockQstkFromNft(msg.sender, _nftId, unlockAmount);
-    }
-
-    function voteGovernanceAddress(address multisig) public {
-        require(mintStarted, "QNFT: mint not started");
-        require(
-            mintStartTime.add(NFT_SALE_DURATION) <= block.timestamp,
-            "QNFT: NFT sale not ended"
-        );
-
-        if (voteAddress[msg.sender] != address(0x0)) {
-            // remove previous vote
-            voteWeights[voteAddress[msg.sender]] = voteWeights[
-                voteAddress[msg.sender]
-            ]
-                .sub(voteWeightsByAddress[msg.sender]);
-        }
-        voteWeights[multisig] = voteWeights[multisig].add(
-            qstkBalances[msg.sender]
-        );
-        voteWeightsByAddress[msg.sender] = qstkBalances[msg.sender];
-        voteAddress[msg.sender] = multisig;
-
-        emit VoteGovernanceAddress(
-            msg.sender,
-            multisig,
-            qstkBalances[msg.sender]
-        );
-    }
-
-    function withdrawToGovernanceAddress(address payable multisig) public {
-        require(mintStarted, "QNFT: mint not started");
-        require(
-            mintStartTime.add(NFT_SALE_DURATION) <= block.timestamp,
-            "QNFT: NFT sale not ended"
-        );
-        require(
-            mintStartTime.add(NFT_SALE_DURATION).add(MIN_VOTE_DURATION) <=
-                block.timestamp,
-            "QNFT: in vote process"
-        );
-
-        require(
-            voteWeights[multisig] >=
-                totalAssignedQstk.mul(VOTE_QUORUM).div(100),
-            "QNFT: specified multisig address is not voted enough"
-        );
-
-        uint256 amount = address(this).balance;
-        multisig.transfer(address(this).balance);
-
-        emit WithdrawToGovernanceAddress(msg.sender, multisig, amount);
-    }
-
-    function safeWithdraw(address payable multisig) public onlyOwner {
-        require(mintStarted, "QNFT: mint not started");
-        require(
-            mintStartTime.add(NFT_SALE_DURATION) <= block.timestamp,
-            "QNFT: NFT sale not ended"
-        );
-        require(
-            mintStartTime.add(NFT_SALE_DURATION).add(MIN_VOTE_DURATION) <=
-                block.timestamp,
-            "QNFT: in vote process"
-        );
-        require(
-            mintStartTime.add(NFT_SALE_DURATION).add(SAFE_VOTE_END_DURATION) <=
-                block.timestamp,
-            "QNFT: wait until safe vote end time"
-        );
-
-        uint256 amount = address(this).balance;
-        multisig.transfer(address(this).balance);
-
-        emit SafeWithdraw(msg.sender, multisig, amount);
     }
 
     // internal functions
@@ -554,7 +509,7 @@ contract QNFT is Ownable, ERC721 {
     {
         require(
             foundationWallet == _foundationWallet,
-            "QBaseNFT: same foundation wallet"
+            "QNFT: same foundation wallet"
         );
 
         foundationWallet = _foundationWallet;
@@ -576,19 +531,6 @@ contract QNFT is Ownable, ERC721 {
         qstkBalances[to] = qstkBalances[to].add(qstkAmount);
         qstkBalances[from] = qstkBalances[from].sub(qstkAmount);
 
-        // Vote result
-        if (voteAddress[from] != address(0x0)) {
-            voteWeightsByAddress[from] = voteWeightsByAddress[from].sub(
-                qstkAmount
-            );
-            voteWeights[voteAddress[msg.sender]] = voteWeights[
-                voteAddress[msg.sender]
-            ]
-                .sub(qstkAmount);
-
-            if (voteWeightsByAddress[from] == 0) {
-                voteAddress[from] = address(0x0);
-            }
-        }
+        governance.updateVoteAmount(msg.sender, qstkAmount, 0);
     }
 }
