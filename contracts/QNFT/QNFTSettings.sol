@@ -96,9 +96,6 @@ contract QNFTSettings is Ownable, IQNFTSettings {
     uint256 public constant EMOTION_COUNT_PER_NFT = 5;
     uint256 public constant BACKGROUND_IMAGE_COUNT = 4;
     uint256 public constant ARROW_IMAGE_COUNT = 3;
-    // Todo: do we need this two constants?
-    uint256 public constant DEFAULT_IMAGE_PRICE = 0.006 ether;
-    uint256 public constant DEFAULT_COIN_PRICE = 0.004 ether;
     uint256 public constant PERCENT_MAX = 100;
 
     // mint options set
