@@ -87,7 +87,7 @@ const favCoins = {
   },
 };
 
-const mintOptions = {
+const lockOptions = {
   A: {
     minAmount: units(0),
     maxAmount: units(100),
@@ -115,7 +115,7 @@ const mintOptions = {
 };
 
 module.exports = {
-  mintOptions,
+  lockOptions,
   favCoins,
   nftImages,
   bgImages,

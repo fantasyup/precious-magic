@@ -37,7 +37,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         uint256 imageId;
         uint256 bgImageId;
         uint256 favCoinId;
-        uint256 mintOptionId;
+        uint256 lockOptionId;
         uint256 mintAmount;
         uint256 defaultImageIndex;
         uint256 createdAt;
@@ -59,7 +59,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         uint256 imageId,
         uint256 bgImageId,
         uint256 favCoinId,
-        uint256 mintOptionId,
+        uint256 lockOptionId,
         string creator_name,
         string color,
         string story
@@ -213,7 +213,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
     function setTotalSupply(uint256 _totalSupply) public onlyOwner {
         require(
             _totalSupply <
-                settings.mintOptionsCount().mul(settings.nftImagesCount()).mul(
+                settings.lockOptionsCount().mul(settings.nftImagesCount()).mul(
                     settings.favCoinsCount()
                 ),
             "QNFT: too big"
@@ -300,10 +300,10 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         uint256 _imageId,
         uint256 _bgImageId,
         uint256 _favCoinId,
-        uint256 _mintOptionId
+        uint256 _lockOptionId
     ) public view returns (bool) {
         return
-            _getNftId(_imageId, _bgImageId, _favCoinId, _mintOptionId) !=
+            _getNftId(_imageId, _bgImageId, _favCoinId, _lockOptionId) !=
             uint256(0);
     }
 
@@ -314,7 +314,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         uint256 _imageId,
         uint256 _bgImageId,
         uint256 _favCoinId,
-        uint256 _mintOptionId,
+        uint256 _lockOptionId,
         uint256 _mintAmount,
         uint256 _defaultImageIndex,
         string memory _name,
@@ -339,7 +339,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
                     _imageId,
                     _bgImageId,
                     _favCoinId,
-                    _mintOptionId,
+                    _lockOptionId,
                     _mintAmount,
                     freeAllocations[msg.sender]
                 ),
@@ -354,7 +354,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         );
 
         require(
-            !nftMinted(_imageId, _bgImageId, _favCoinId, _mintOptionId),
+            !nftMinted(_imageId, _bgImageId, _favCoinId, _lockOptionId),
             "QNFT: nft already exists"
         );
 
@@ -363,7 +363,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
             _imageId,
             _favCoinId,
             _bgImageId,
-            _mintOptionId,
+            _lockOptionId,
             qstkAmount,
             _defaultImageIndex,
             block.timestamp,
@@ -371,7 +371,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
             NFTMeta(_name, _color, _story),
             NFTCreator(_creator_name, msg.sender)
         );
-        _setNftId(_imageId, _bgImageId, _favCoinId, _mintOptionId, nftCount);
+        _setNftId(_imageId, _bgImageId, _favCoinId, _lockOptionId, nftCount);
 
         totalAssignedQstk = totalAssignedQstk.add(qstkAmount);
 
@@ -406,7 +406,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
             _imageId,
             _bgImageId,
             _favCoinId,
-            _mintOptionId,
+            _lockOptionId,
             _creator_name,
             _color,
             _story
@@ -507,7 +507,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
 
         NFTData storage item = nftData[_nftId];
         uint256 lockDuration =
-            settings.mintOptionLockDuration(item.mintOptionId);
+            settings.lockOptionLockDuration(item.lockOptionId);
 
         require(item.unlocked == false, "QNFT: already unlocked");
         require(
@@ -534,7 +534,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         uint256 _imageId,
         uint256 _bgImageId,
         uint256 _favCoinId,
-        uint256 _mintOptionId
+        uint256 _lockOptionId
     ) internal view returns (uint256) {
         uint256 id =
             abi
@@ -542,7 +542,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
                 uint64(_imageId),
                 uint64(_bgImageId),
                 uint64(_favCoinId),
-                uint64(_mintOptionId)
+                uint64(_lockOptionId)
             )
                 .toUint256(0);
 
@@ -556,7 +556,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         uint256 _imageId,
         uint256 _bgImageId,
         uint256 _favCoinId,
-        uint256 _mintOptionId,
+        uint256 _lockOptionId,
         uint256 _nftId
     ) internal {
         uint256 id =
@@ -565,7 +565,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
                 uint64(_imageId),
                 uint64(_bgImageId),
                 uint64(_favCoinId),
-                uint64(_mintOptionId)
+                uint64(_lockOptionId)
             )
                 .toUint256(0);
         nftIds[id] = _nftId;
@@ -615,3 +615,17 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         governance.updateVoteAmount(msg.sender, qstkAmount, 0);
     }
 }
+
+/**
+
+Todo: 
+QSTK token address upgrade ability
+Before token upgrade, admin should supply same amount of QSTK token to the contract while upgrade or before upgrade
+Upgrade function should check new_QSTK amount is bigger than old_QSTK amount
+
+renameing function 
+Vote status (not_started, ongoing, able_to_withdraw)
+
+mint-option -> lock option
+
+ */

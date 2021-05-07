@@ -3,7 +3,7 @@ const { solidity } = require("ethereum-waffle");
 const { ethers } = require("hardhat");
 const { expect } = chai;
 const {
-  mintOptions,
+  lockOptions,
   favCoins,
   nftImages,
   bgImages,
@@ -62,69 +62,69 @@ describe("QNFTSettings", () => {
     });
   });
 
-  describe("QNFTSettings: owner can manager nft/mint options", () => {
+  describe("QNFTSettings: owner can manager nft/lock options", () => {
     it("Should be ble to set mint price multiplier", async () => {
       await expect(
-        qnftSettings.connect(user).setMintPriceMultiplier(200)
+        qnftSettings.connect(user).setNonTokenPriceMultiplier(200)
       ).to.be.revertedWith("Ownable: caller is not the owner");
 
-      expect(await qnftSettings.callStatic.mintPriceMultiplier()).to.be.equal(
-        100
-      );
-      await qnftSettings.setMintPriceMultiplier(200);
-      expect(await qnftSettings.callStatic.mintPriceMultiplier()).to.be.equal(
-        200
-      );
-      await qnftSettings.setMintPriceMultiplier(100);
-      expect(await qnftSettings.callStatic.mintPriceMultiplier()).to.be.equal(
-        100
-      );
+      expect(
+        await qnftSettings.callStatic.nonTokenPriceMultiplier()
+      ).to.be.equal(100);
+      await qnftSettings.setNonTokenPriceMultiplier(200);
+      expect(
+        await qnftSettings.callStatic.nonTokenPriceMultiplier()
+      ).to.be.equal(200);
+      await qnftSettings.setNonTokenPriceMultiplier(100);
+      expect(
+        await qnftSettings.callStatic.nonTokenPriceMultiplier()
+      ).to.be.equal(100);
     });
 
-    it("Should be able to add/remove mint options", async () => {
+    it("Should be able to add/remove lock options", async () => {
       await expect(
         qnftSettings
           .connect(user)
-          .addMintOption(units(0), units(1000), months(1), 20)
+          .addLockOption(units(0), units(1000), months(1), 20)
       ).to.be.revertedWith("Ownable: caller is not the owner");
       await expect(
-        qnftSettings.addMintOption(units(0), units(1000), months(1), 101)
+        qnftSettings.addLockOption(units(0), units(1000), months(1), 101)
       ).to.be.revertedWith("QNFTSettings: invalid discount");
 
-      expect(await qnftSettings.callStatic.mintOptionsCount()).to.be.equal(0);
-      await qnftSettings.addMintOption(...Object.values(mintOptions.D));
-      await qnftSettings.addMintOption(...Object.values(mintOptions.B));
-      await qnftSettings.addMintOption(...Object.values(mintOptions.C));
-      await qnftSettings.addMintOption(...Object.values(mintOptions.A));
-      expect(await qnftSettings.callStatic.mintOptionsCount()).to.be.equal(4);
+      expect(await qnftSettings.callStatic.lockOptionsCount()).to.be.equal(0);
+      await qnftSettings.addLockOption(...Object.values(lockOptions.D));
+      await qnftSettings.addLockOption(...Object.values(lockOptions.B));
+      await qnftSettings.addLockOption(...Object.values(lockOptions.C));
+      await qnftSettings.addLockOption(...Object.values(lockOptions.A));
+      expect(await qnftSettings.callStatic.lockOptionsCount()).to.be.equal(4);
 
       await expect(
-        qnftSettings.connect(user).removeMintOption(4)
+        qnftSettings.connect(user).removeLockOption(4)
       ).to.be.revertedWith("Ownable: caller is not the owner");
-      await expect(qnftSettings.removeMintOption(4)).to.be.revertedWith(
-        "QNFTSettings: invalid mint option id"
+      await expect(qnftSettings.removeLockOption(4)).to.be.revertedWith(
+        "QNFTSettings: invalid lock option id"
       );
 
-      await qnftSettings.removeMintOption(0);
-      expect(await qnftSettings.callStatic.mintOptionsCount()).to.be.equal(3);
+      await qnftSettings.removeLockOption(0);
+      expect(await qnftSettings.callStatic.lockOptionsCount()).to.be.equal(3);
 
-      expect((await qnftSettings.mintOptions(0))[0]).equal(
-        mintOptions.A.minAmount
+      expect((await qnftSettings.lockOptions(0))[0]).equal(
+        lockOptions.A.minAmount
       );
-      expect((await qnftSettings.mintOptions(0))[1]).equal(
-        mintOptions.A.maxAmount
+      expect((await qnftSettings.lockOptions(0))[1]).equal(
+        lockOptions.A.maxAmount
       );
-      expect((await qnftSettings.mintOptions(1))[2]).equal(
-        mintOptions.B.lockDuration
+      expect((await qnftSettings.lockOptions(1))[2]).equal(
+        lockOptions.B.lockDuration
       );
-      expect((await qnftSettings.mintOptions(2))[3]).equal(
-        mintOptions.C.discount
+      expect((await qnftSettings.lockOptions(2))[3]).equal(
+        lockOptions.C.discount
       );
-      await expect(qnftSettings.mintOptionLockDuration(4)).to.be.revertedWith(
-        "QNFTSettings: invalid mint option"
+      await expect(qnftSettings.lockOptionLockDuration(4)).to.be.revertedWith(
+        "QNFTSettings: invalid lock option"
       );
-      expect(await qnftSettings.mintOptionLockDuration(0)).to.be.equal(
-        mintOptions.A.lockDuration
+      expect(await qnftSettings.lockOptionLockDuration(0)).to.be.equal(
+        lockOptions.A.lockDuration
       );
     });
 
@@ -285,7 +285,7 @@ describe("QNFTSettings", () => {
       ).to.be.revertedWith("QNFTSettings: invalid fav coin");
       await expect(
         qnftSettings.callStatic.calcMintPrice(0, 0, 0, 4, units(50), units(10))
-      ).to.be.revertedWith("QNFTSettings: invalid mint option");
+      ).to.be.revertedWith("QNFTSettings: invalid lock option");
       await expect(
         qnftSettings.callStatic.calcMintPrice(0, 0, 0, 0, units(150), units(10))
       ).to.be.revertedWith("QNFTSettings: invalid mint amount");
@@ -302,30 +302,16 @@ describe("QNFTSettings", () => {
           units(50),
           units(10)
         )
-      ).to.be.equal(units(0.1104));
+      ).to.be.equal(units(0.11));
 
       await expect(
-        qnftSettings.connect(user).setMintDiscountRate(30)
+        qnftSettings.connect(user).setTokenPriceMultiplier(30)
       ).to.be.revertedWith("Ownable: caller is not the owner");
-      await expect(qnftSettings.setMintDiscountRate(101)).to.be.revertedWith(
-        "QNFTSettings: invalid discount rate"
-      );
+      await expect(
+        qnftSettings.setTokenPriceMultiplier(101)
+      ).to.be.revertedWith("QNFTSettings: invalid discount rate");
 
-      await qnftSettings.setMintDiscountRate(30);
-
-      expect(
-        await qnftSettings.callStatic.calcMintPrice(
-          0,
-          0,
-          0,
-          0,
-          units(50),
-          units(20)
-        )
-      ).to.be.equal(units(0.11025));
-
-      await qnftSettings.setMintDiscountRate(90);
-      await qnftSettings.setMintPriceMultiplier(200);
+      await qnftSettings.setTokenPriceMultiplier(30);
 
       expect(
         await qnftSettings.callStatic.calcMintPrice(
@@ -336,14 +322,28 @@ describe("QNFTSettings", () => {
           units(50),
           units(20)
         )
-      ).to.be.equal(units(0.22));
+      ).to.be.equal(units(0.11012));
+
+      await qnftSettings.setTokenPriceMultiplier(90);
+      await qnftSettings.setNonTokenPriceMultiplier(200);
+
+      expect(
+        await qnftSettings.callStatic.calcMintPrice(
+          0,
+          0,
+          0,
+          0,
+          units(50),
+          units(20)
+        )
+      ).to.be.equal(units(0.22036));
     });
   });
-  describe("QNFTSettings: not able to remove mint options after mint started", () => {
+  describe("QNFTSettings: not able to remove lock options after mint started", () => {
     it("not able to mint remove options after mint started", async () => {
       await qnft.startMint();
 
-      await expect(qnftSettings.removeMintOption(0)).to.be.revertedWith(
+      await expect(qnftSettings.removeLockOption(0)).to.be.revertedWith(
         "QNFTSettings: mint already started"
       );
 

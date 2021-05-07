@@ -3,11 +3,7 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "solidity-bytes-utils/contracts/BytesLib.sol";
 
 import "../interface/IQNFT.sol";
 
@@ -15,9 +11,7 @@ import "../interface/IQNFT.sol";
  * @author fantasy
  */
 contract QNFTGov is Ownable, ReentrancyGuard {
-    using SafeERC20 for IERC20;
     using SafeMath for uint256;
-    using BytesLib for bytes;
 
     event VoteGovernanceAddress(
         address indexed voter,
@@ -40,9 +34,9 @@ contract QNFTGov is Ownable, ReentrancyGuard {
     uint256 public constant PERCENT_MAX = 100;
 
     // vote options
-    mapping(address => uint256) voteWeights; // vote amount of give multisig wallet
-    mapping(address => address) voteAddress; // vote address of given user
-    mapping(address => uint256) voteWeightsByAddress; // vote amoutn of given user
+    mapping(address => uint256) voteResult; // vote amount of give multisig wallet
+    mapping(address => address) voteAddressByVoter; // vote address of given user
+    mapping(address => uint256) voteWeightsByVoter; // vote amoutn of given user
 
     IQNFT qnft;
 
@@ -59,18 +53,18 @@ contract QNFTGov is Ownable, ReentrancyGuard {
     function voteGovernanceAddress(address multisig) public {
         require(qnft.mintFinished(), "QNFTGov: NFT sale not ended");
 
-        if (voteAddress[msg.sender] != address(0x0)) {
+        if (voteAddressByVoter[msg.sender] != address(0x0)) {
             // remove previous vote
-            voteWeights[voteAddress[msg.sender]] = voteWeights[
-                voteAddress[msg.sender]
+            voteResult[voteAddressByVoter[msg.sender]] = voteResult[
+                voteAddressByVoter[msg.sender]
             ]
-                .sub(voteWeightsByAddress[msg.sender]);
+                .sub(voteWeightsByVoter[msg.sender]);
         }
 
         uint256 qstkAmount = qnft.qstkBalances(msg.sender);
-        voteWeights[multisig] = voteWeights[multisig].add(qstkAmount);
-        voteWeightsByAddress[msg.sender] = qstkAmount;
-        voteAddress[msg.sender] = multisig;
+        voteResult[multisig] = voteResult[multisig].add(qstkAmount);
+        voteWeightsByVoter[msg.sender] = qstkAmount;
+        voteAddressByVoter[msg.sender] = multisig;
 
         emit VoteGovernanceAddress(msg.sender, multisig, qstkAmount);
     }
@@ -85,7 +79,7 @@ contract QNFTGov is Ownable, ReentrancyGuard {
         require(qnft.minVoteDurationPassed(), "QNFTGov: in vote process");
 
         require(
-            voteWeights[multisig] >=
+            voteResult[multisig] >=
                 qnft.totalAssignedQstk().mul(VOTE_QUORUM).div(PERCENT_MAX),
             "QNFTGov: specified multisig address is not voted enough"
         );
@@ -125,21 +119,21 @@ contract QNFTGov is Ownable, ReentrancyGuard {
         uint256 originAmount,
         uint256 newAmount
     ) public onlyQnft {
-        if (voteAddress[user] != address(0x0)) {
+        if (voteAddressByVoter[user] != address(0x0)) {
             // just updates the vote amount if the user has previous vote.
 
-            voteWeightsByAddress[user] = voteWeightsByAddress[user]
+            voteWeightsByVoter[user] = voteWeightsByVoter[user]
                 .sub(originAmount)
                 .add(newAmount);
 
-            voteWeights[voteAddress[msg.sender]] = voteWeights[
-                voteAddress[msg.sender]
+            voteResult[voteAddressByVoter[msg.sender]] = voteResult[
+                voteAddressByVoter[msg.sender]
             ]
                 .sub(originAmount)
                 .add(newAmount);
 
-            if (voteWeightsByAddress[user] == 0) {
-                voteAddress[user] = address(0x0);
+            if (voteWeightsByVoter[user] == 0) {
+                voteAddressByVoter[user] = address(0x0);
             }
         }
     }

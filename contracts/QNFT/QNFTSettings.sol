@@ -3,7 +3,9 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+import "../interface/IQStk.sol";
 import "../interface/IQNFT.sol";
 import "../interface/IQNFTSettings.sol";
 
@@ -15,7 +17,7 @@ contract QNFTSettings is Ownable, IQNFTSettings {
 
     // structs
 
-    struct MintOption {
+    struct LockOption {
         uint256 minAmount; // e.g. 0QSTK, 100QSTK, 200QSTK, 300QSTK
         uint256 maxAmount; // e.g. 0QSTK, 100QSTK, 200QSTK, 300QSTK
         uint256 lockDuration; // e.g. 3 months, 6 months, 1 year
@@ -63,18 +65,18 @@ contract QNFTSettings is Ownable, IQNFTSettings {
     }
 
     // events
-    event SetMintPriceMultiplier(
+    event SetNonTokenPriceMultiplier(
         address indexed owner,
-        uint256 mintPriceMultiplier
+        uint256 nonTokenPriceMultiplier
     );
-    event AddMintOption(
+    event AddLockOption(
         address indexed owner,
         uint256 minAmount,
         uint256 maxAmount,
         uint256 indexed lockDuration,
         uint256 discount // percent
     );
-    event RemoveMintOption(address indexed owner, uint256 indexed mintOptionId);
+    event RemoveLockOption(address indexed owner, uint256 indexed lockOptionId);
     event AddImageSet(address indexed owner, uint256 mintPrice, string[] urls);
     event RemoveImageSet(address indexed owner, uint256 indexed nftImageId);
     event AddBgImage(address indexed owner, string[] urls);
@@ -99,11 +101,11 @@ contract QNFTSettings is Ownable, IQNFTSettings {
     uint256 public constant PERCENT_MAX = 100;
 
     // mint options set
-    uint256 public initialSalePrice; // qstk price at initial sale
-    uint256 public mintPriceMultiplier; // percentage - should be multiplied to calculate mint price
-    uint256 public mintDiscountRate; // percentage - overall discount rate of qstk price
+    uint256 public qstkPrice; // qstk price
+    uint256 public nonTokenPriceMultiplier; // percentage - should be multiplied to non token price - image + coin
+    uint256 public tokenPriceMultiplier; // percentage - should be multiplied to token price - qstk
 
-    MintOption[] public mintOptions; // array of mint options
+    LockOption[] public lockOptions; // array of lock options
     NFTBackgroundImage[] public bgImages; // array of background images
     NFTArrowImage public arrowImage; // arrow image to be used on frontend
     NFTImage[] public nftImages; // array of nft images
@@ -113,61 +115,49 @@ contract QNFTSettings is Ownable, IQNFTSettings {
     IQNFT qnft; // QNFT contract address
 
     constructor() {
-        initialSalePrice = 0.00001 ether; // qstk price = 0.00001 ether
-        mintPriceMultiplier = PERCENT_MAX; // mint price multiplier = 100%;
+        qstkPrice = 0.00001 ether; // qstk price = 0.00001 ether
+        nonTokenPriceMultiplier = PERCENT_MAX; // mint price multiplier = 100%;
     }
 
     /**
-     * @dev sets the mint price multiplier
+     * @dev returns the count of lock options
      */
-    function setMintPriceMultiplier(uint256 _mintPriceMultiplier)
-        public
-        onlyOwner
-    {
-        mintPriceMultiplier = _mintPriceMultiplier;
-
-        emit SetMintPriceMultiplier(msg.sender, mintPriceMultiplier);
+    function lockOptionsCount() public view override returns (uint256) {
+        return lockOptions.length;
     }
 
     /**
-     * @dev returns the count of mint options
+     * @dev returns the lock duration of given lock option id
      */
-    function mintOptionsCount() public view override returns (uint256) {
-        return mintOptions.length;
-    }
-
-    /**
-     * @dev returns the lock duration of given mint option id
-     */
-    function mintOptionLockDuration(uint256 _mintOptionId)
+    function lockOptionLockDuration(uint256 _lockOptionId)
         public
         view
         override
         returns (uint256)
     {
         require(
-            _mintOptionId < mintOptions.length,
-            "QNFTSettings: invalid mint option"
+            _lockOptionId < lockOptions.length,
+            "QNFTSettings: invalid lock option"
         );
 
-        return mintOptions[_mintOptionId].lockDuration;
+        return lockOptions[_lockOptionId].lockDuration;
     }
 
     /**
-     * @dev adds a new mint option
+     * @dev adds a new lock option
      */
-    function addMintOption(
+    function addLockOption(
         uint256 _minAmount,
         uint256 _maxAmount,
         uint256 _lockDuration,
         uint256 _discount
     ) public onlyOwner {
         require(_discount < PERCENT_MAX, "QNFTSettings: invalid discount");
-        mintOptions.push(
-            MintOption(_minAmount, _maxAmount, _lockDuration, _discount)
+        lockOptions.push(
+            LockOption(_minAmount, _maxAmount, _lockDuration, _discount)
         );
 
-        emit AddMintOption(
+        emit AddLockOption(
             msg.sender,
             _minAmount,
             _maxAmount,
@@ -177,21 +167,21 @@ contract QNFTSettings is Ownable, IQNFTSettings {
     }
 
     /**
-     * @dev remove a mint option
+     * @dev remove a lock option
      */
-    function removeMintOption(uint256 _mintOptionId) public onlyOwner {
+    function removeLockOption(uint256 _lockOptionId) public onlyOwner {
         require(
             qnft.mintStarted() == false,
             "QNFTSettings: mint already started"
         );
 
-        uint256 length = mintOptions.length;
-        require(length > _mintOptionId, "QNFTSettings: invalid mint option id");
+        uint256 length = lockOptions.length;
+        require(length > _lockOptionId, "QNFTSettings: invalid lock option id");
 
-        mintOptions[_mintOptionId] = mintOptions[length - 1];
-        mintOptions.pop();
+        lockOptions[_lockOptionId] = lockOptions[length - 1];
+        lockOptions.pop();
 
-        emit RemoveMintOption(msg.sender, _mintOptionId);
+        emit RemoveLockOption(msg.sender, _lockOptionId);
     }
 
     /**
@@ -446,7 +436,7 @@ contract QNFTSettings is Ownable, IQNFTSettings {
         uint256 _imageId,
         uint256 _bgImageId,
         uint256 _favCoinId,
-        uint256 _mintOptionId,
+        uint256 _lockOptionId,
         uint256 _mintAmount,
         uint256 _freeAmount
     ) public view override returns (uint256) {
@@ -459,32 +449,37 @@ contract QNFTSettings is Ownable, IQNFTSettings {
             "QNFTSettings: invalid background option"
         );
         require(
-            mintOptions.length > _mintOptionId,
-            "QNFTSettings: invalid mint option"
+            lockOptions.length > _lockOptionId,
+            "QNFTSettings: invalid lock option"
         );
 
-        MintOption memory mintOption = mintOptions[_mintOptionId];
+        LockOption memory lockOption = lockOptions[_lockOptionId];
 
         require(
-            mintOption.minAmount <= _mintAmount + _freeAmount &&
-                _mintAmount <= mintOption.maxAmount,
+            lockOption.minAmount <= _mintAmount + _freeAmount &&
+                _mintAmount <= lockOption.maxAmount,
             "QNFTSettings: invalid mint amount"
         );
         require(favCoins.length > _favCoinId, "QNFTSettings: invalid fav coin");
 
-        // mintPrice = (initialSalePrice * mintAmount * discountRate + (imageMintPrice + favCoinMintPrice)) * mintMultiplier
+        // mintPrice = qstkPrice * mintAmount * discountRate + (imageMintPrice + favCoinMintPrice) * nonTokenPriceMultiplier
 
-        uint256 discountRate = getDiscountRate(mintOption.discount);
-        uint256 qstkPrice =
-            initialSalePrice.mul(_mintAmount).mul(discountRate).div(10**18).div(
-                PERCENT_MAX
-            );
-        uint256 mintPrice =
-            qstkPrice.add(nftImages[_imageId].mintPrice).add(
-                favCoins[_favCoinId].mintPrice
-            );
+        uint256 decimal = IQStk(qnft.qstk()).decimals();
+        uint256 tokenPrice =
+            qstkPrice
+                .mul(_mintAmount)
+                .mul(uint256(PERCENT_MAX).sub(lockOption.discount))
+                .div(10**decimal)
+                .div(PERCENT_MAX);
+        tokenPrice = tokenPrice.mul(tokenPriceMultiplier).div(PERCENT_MAX);
 
-        return mintPrice.mul(mintPriceMultiplier).div(PERCENT_MAX);
+        uint256 nonTokenPrice =
+            nftImages[_imageId].mintPrice.add(favCoins[_favCoinId].mintPrice);
+        nonTokenPrice = nonTokenPrice.mul(nonTokenPriceMultiplier).div(
+            PERCENT_MAX
+        );
+
+        return tokenPrice.add(nonTokenPrice);
     }
 
     /**
@@ -497,32 +492,28 @@ contract QNFTSettings is Ownable, IQNFTSettings {
     }
 
     /**
-     * @dev sets overall discount rate of qstk price
+     * @dev sets token price multiplier - qstk
      */
-    function setMintDiscountRate(uint256 _mintDiscountRate) public onlyOwner {
+    function setTokenPriceMultiplier(uint256 _tokenPriceMultiplier)
+        public
+        onlyOwner
+    {
         require(
-            _mintDiscountRate < PERCENT_MAX,
+            _tokenPriceMultiplier < PERCENT_MAX,
             "QNFTSettings: invalid discount rate"
         );
-        mintDiscountRate = _mintDiscountRate;
+        tokenPriceMultiplier = _tokenPriceMultiplier;
     }
 
-    // internal functions
-
     /**
-     * @dev calculate discount rate based on given mint option and overall discount rate
+     * @dev sets non token price multiplier - image + coins
      */
-    function getDiscountRate(uint256 _discount)
-        internal
-        view
-        returns (uint256)
+    function setNonTokenPriceMultiplier(uint256 _nonTokenPriceMultiplier)
+        public
+        onlyOwner
     {
-        uint256 discount = _discount.add(mintDiscountRate);
+        nonTokenPriceMultiplier = _nonTokenPriceMultiplier;
 
-        if (discount > PERCENT_MAX) {
-            return 0;
-        } else {
-            return PERCENT_MAX.sub(discount);
-        }
+        emit SetNonTokenPriceMultiplier(msg.sender, nonTokenPriceMultiplier);
     }
 }

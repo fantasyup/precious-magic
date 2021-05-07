@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 interface IQNFTSettings {
     function favCoinsCount() external view returns (uint256);
 
-    function mintOptionsCount() external view returns (uint256);
+    function lockOptionsCount() external view returns (uint256);
 
     function nftImagesCount() external view returns (uint256);
 
@@ -20,7 +20,7 @@ interface IQNFTSettings {
         view
         returns (uint256);
 
-    function mintOptionLockDuration(uint256 _mintOptionId)
+    function lockOptionLockDuration(uint256 _mintOptionId)
         external
         view
         returns (uint256);

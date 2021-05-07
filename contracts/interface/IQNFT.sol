@@ -2,6 +2,8 @@
 pragma solidity ^0.8.0;
 
 interface IQNFT {
+    function qstk() external view returns (address);
+
     function mintStarted() external view returns (bool);
 
     function mintFinished() external view returns (bool);
