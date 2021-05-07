@@ -22,15 +22,18 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
 
     // structs
     struct NFTCreator {
+        // NFT minter informations
         string name;
         address wallet;
     }
     struct NFTMeta {
+        // NFT meta informations
         string name;
         string color;
         string story;
     }
     struct NFTData {
+        // NFT data
         uint256 imageId;
         uint256 bgImageId;
         uint256 favCoinId;
@@ -95,26 +98,26 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
     // qstk
     address public qstk;
     uint256 public totalAssignedQstk; // total qstk balance assigned to nfts
-    mapping(address => uint256) public qstkBalances;
-    mapping(address => uint256) public freeAllocations;
-    uint256 totalFreeAllocations;
-    uint256 distributedFreeAllocations;
+    mapping(address => uint256) public qstkBalances; // locked qstk balances per user
+    mapping(address => uint256) public freeAllocations; // free allocated qstk balances per user
+    uint256 totalFreeAllocations; // total free allocated qstk balances
+    uint256 distributedFreeAllocations; // total distributed amount of free allocations
 
     // nft
-    IQNFTSettings settings;
-    IQNFTGov governance;
+    IQNFTSettings settings; // QNFTSettings contract address
+    IQNFTGov governance; // QNFTGov contract address
     uint256 public totalSupply; // maximum mintable nft count
     mapping(uint256 => NFTData) public nftData;
-    mapping(uint256 => uint256) private nftId;
-    uint256 nftCount;
+    mapping(uint256 => uint256) private nftIds;
+    uint256 private nftCount; // circulating supply - minted nft counts
 
     // mint options set
     bool public mintStarted;
-    uint256 public mintStartTime;
     bool public mintPaused;
+    uint256 public mintStartTime;
 
     // foundation
-    address payable public foundationWallet;
+    address payable public foundationWallet; // periodically sends FOUNDATION_PERCENTAGE % of deposits to foundation wallet.
 
     constructor(
         address _qstk,
@@ -131,20 +134,33 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
     }
 
     // qstk
+
+    /**
+     * @dev returns the total qstk balance locked on the contract
+     */
     function totalQstkBalance() public view returns (uint256) {
         return IERC20(qstk).balanceOf(address(this));
     }
 
+    /**
+     * @dev returns remaining qstk balance of the contract
+     */
     function remainingQstk() public view returns (uint256) {
         return totalQstkBalance().sub(totalAssignedQstk);
     }
 
+    /**
+     * @dev deposits qstk tokens to the contract
+     */
     function depositQstk(uint256 _amount) public onlyOwner {
         IERC20(qstk).safeTransferFrom(msg.sender, address(this), _amount);
 
         emit DepositQstk(msg.sender, _amount);
     }
 
+    /**
+     * @dev withdraws qstk token from the contract - only remaing balance available
+     */
     function withdrawQstk(uint256 _amount) public onlyOwner {
         require(remainingQstk() >= _amount, "QNFT: not enough balance");
         IERC20(qstk).safeTransfer(msg.sender, _amount);
@@ -152,6 +168,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         emit WithdrawQstk(msg.sender, _amount);
     }
 
+    /**
+     * @dev adds free allocation to the user
+     */
     function addFreeAllocation(address _user, uint256 _amount)
         public
         onlyOwner
@@ -160,6 +179,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         totalFreeAllocations = totalFreeAllocations.add(_amount);
     }
 
+    /**
+     * @dev removes free allocation from the user
+     */
     function removeFreeAllocation(address _user, uint256 _amount)
         public
         onlyOwner
@@ -177,10 +199,16 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
 
     // NFT
 
+    /**
+     * @dev returns minted nft count
+     */
     function circulatingSupply() public view returns (uint256) {
         return nftCount;
     }
 
+    /**
+     * @dev sets the maximum mintable count
+     */
     function setTotalSupply(uint256 _totalSupply) public onlyOwner {
         require(
             _totalSupply <
@@ -194,6 +222,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         emit SetTotalSupply(msg.sender, totalSupply);
     }
 
+    /**
+     * @dev starts/restarts mint process
+     */
     function startMint() public onlyOwner {
         require(
             mintStarted == false || mintFinished(),
@@ -206,6 +237,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         emit StartMint(msg.sender, mintStartTime);
     }
 
+    /**
+     * @dev pause mint process
+     */
     function pauseMint() public onlyOwner {
         require(mintStarted == true, "QNFT: mint not started");
         require(mintPaused == false, "QNFT: mint already paused");
@@ -215,6 +249,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         emit PauseMint(msg.sender, block.timestamp);
     }
 
+    /**
+     * @dev unpause mint process
+     */
     function unPauseMint() public onlyOwner {
         require(mintStarted == true, "QNFT: mint not started");
         require(mintPaused == true, "QNFT: mint not paused");
@@ -224,14 +261,18 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         emit UnpauseMint(msg.sender, block.timestamp);
     }
 
-    // Check if NFT mint process is finished.
+    /**
+     * @dev checks if mint process is finished
+     */
     function mintFinished() public view returns (bool) {
         require(mintStarted, "QNFT: mint not started");
 
         return mintStartTime.add(NFT_SALE_DURATION) <= block.timestamp;
     }
 
-    // Check if min vote duration is passed.
+    /**
+     * @dev checks if min vote duration is passed
+     */
     function minVoteDurationPassed() public view returns (bool) {
         require(mintFinished(), "QNFT: NFT sale not ended");
 
@@ -240,7 +281,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
             block.timestamp;
     }
 
-    // Check if safe vote end duration is passed
+    /**
+     * @dev checks if safe vote end duration is passed
+     */
     function safeVoteEndDurationPassed() public view returns (bool) {
         require(minVoteDurationPassed(), "QNFT: wait until safe vote end time");
 
@@ -249,6 +292,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
             block.timestamp;
     }
 
+    /**
+     * @dev checks if given nft set is exists
+     */
     function nftMinted(
         uint256 _imageId,
         uint256 _bgImageId,
@@ -260,6 +306,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
             uint256(0);
     }
 
+    /**
+     * @dev mint nft with given mint options
+     */
     function mintNFT(
         uint256 _imageId,
         uint256 _bgImageId,
@@ -362,6 +411,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         );
     }
 
+    /**
+     * @dev updates nft image of a given nft
+     */
     function upgradeNftImage(uint256 _nftId, uint256 _imageId) public payable {
         require(
             _nftId != uint256(0) && nftCount >= _nftId,
@@ -388,6 +440,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         emit UpgradeNftImage(msg.sender, _nftId, oldImageId, _imageId);
     }
 
+    /**
+     * @dev updates background of a given nft
+     */
     function upgradeNftBackground(uint256 _nftId, uint256 _bgImageId) public {
         require(
             _nftId != uint256(0) && nftCount >= _nftId,
@@ -405,6 +460,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         emit UpgradeNftBackground(msg.sender, _nftId, oldBgImageId, _bgImageId);
     }
 
+    /**
+     * @dev updates favorite coin of a given nft
+     */
     function upgradeNftCoin(uint256 _nftId, uint256 _favCoinId) public payable {
         require(
             _nftId != uint256(0) && nftCount >= _nftId,
@@ -431,6 +489,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         emit UpgradeNftCoin(msg.sender, _nftId, oldFavCoinId, _favCoinId);
     }
 
+    /**
+     * @dev unlocks/withdraws qstk from contract
+     */
     function unlockQstkFromNft(uint256 _nftId) public nonReentrant {
         require(
             _nftId != uint256(0) && nftCount >= _nftId,
@@ -459,6 +520,10 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
     }
 
     // internal functions
+
+    /**
+     * @dev returns the nft id of a given mint option
+     */
     function _getNftId(
         uint256 _imageId,
         uint256 _bgImageId,
@@ -475,9 +540,12 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
             )
                 .toUint256(0);
 
-        return nftId[id];
+        return nftIds[id];
     }
 
+    /**
+     * @dev sets nft id for given mint options
+     */
     function _setNftId(
         uint256 _imageId,
         uint256 _bgImageId,
@@ -494,15 +562,20 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
                 uint64(_mintOptionId)
             )
                 .toUint256(0);
-        nftId[id] = _nftId;
+        nftIds[id] = _nftId;
     }
 
+    /**
+     * @dev transfers given amount of qstk token to foundation wallet
+     */
     function _transferFoundation(uint256 _amount) internal {
         // transfer to foundation wallet
         foundationWallet.transfer(_amount);
     }
 
-    // foundation
+    /**
+     * @dev sets the foundation wallet
+     */
     function setFoundationWallet(address payable _foundationWallet)
         public
         onlyOwner
@@ -517,7 +590,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         emit SetFoundationWallet(msg.sender, _foundationWallet);
     }
 
-    // transfer NFT
+    /**
+     * @dev transfer nft
+     */
     function _transfer(
         address from,
         address to,
