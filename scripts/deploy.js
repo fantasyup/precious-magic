@@ -9,18 +9,23 @@ async function main() {
   console.log("network:", await ethers.provider.getNetwork());
 
   const signer = (await ethers.getSigners())[0];
+  console.log("Deployer: ", signer.address);
+  console.log("Foundation: ", foundation);
 
   const QStkFactory = await ethers.getContractFactory("QStk");
   const qstk = await QStkFactory.deploy(units(300000000));
   await qstk.deployed();
+  console.log("QStk: ", qstk.address);
 
   const QNFTSettingsFactory = await ethers.getContractFactory("QNFTSettings");
   const qnftSettings = await QNFTSettingsFactory.deploy();
   await qnftSettings.deployed();
+  console.log("QNFTSettings: ", qnftSettings.address);
 
   const QNFTGovFactory = await ethers.getContractFactory("QNFTGov");
   const qnftGov = await QNFTGovFactory.deploy();
   await qnftGov.deployed();
+  console.log("QNFTGov: ", qnftGov.address);
 
   const QNFTFactory = await ethers.getContractFactory("QNFT");
   const qnft = await QNFTFactory.deploy(
@@ -30,12 +35,6 @@ async function main() {
     foundation
   );
   await qnft.deployed();
-
-  console.log("Deployer: ", signer.address);
-  console.log("Foundation: ", foundation);
-  console.log("QStk: ", qstk.address);
-  console.log("QNFTSettings: ", qnftSettings.address);
-  console.log("QNFTGov: ", qnftGov.address);
   console.log("QNFT: ", qnft.address);
 }
 
