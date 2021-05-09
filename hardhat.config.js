@@ -12,6 +12,11 @@ module.exports = {
     currency: "USD",
   },
   networks: {
+    localhost: {
+      chainId: 1337,
+      url: "http://127.0.0.1:8545",
+      timeout: 100000000,
+    },
     hardhat: {
       forking: {
         url: `https://mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
