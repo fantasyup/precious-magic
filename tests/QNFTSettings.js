@@ -302,16 +302,13 @@ describe("QNFTSettings", () => {
           units(50),
           units(10)
         )
-      ).to.be.equal(units(0.11));
+      ).to.be.equal(units(0.1104));
 
       await expect(
         qnftSettings.connect(user).setTokenPriceMultiplier(30)
       ).to.be.revertedWith("Ownable: caller is not the owner");
-      await expect(
-        qnftSettings.setTokenPriceMultiplier(101)
-      ).to.be.revertedWith("QNFTSettings: invalid discount rate");
 
-      await qnftSettings.setTokenPriceMultiplier(30);
+      await qnftSettings.setTokenPriceMultiplier(300);
 
       expect(
         await qnftSettings.callStatic.calcMintPrice(
@@ -322,9 +319,9 @@ describe("QNFTSettings", () => {
           units(50),
           units(20)
         )
-      ).to.be.equal(units(0.11012));
+      ).to.be.equal(units(0.1112));
 
-      await qnftSettings.setTokenPriceMultiplier(90);
+      await qnftSettings.setTokenPriceMultiplier(900);
       await qnftSettings.setNonTokenPriceMultiplier(200);
 
       expect(
@@ -336,7 +333,7 @@ describe("QNFTSettings", () => {
           units(50),
           units(20)
         )
-      ).to.be.equal(units(0.22036));
+      ).to.be.equal(units(0.2236));
     });
   });
   describe("QNFTSettings: not able to remove lock options after mint started", () => {

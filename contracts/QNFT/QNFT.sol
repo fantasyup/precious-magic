@@ -9,85 +9,17 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "solidity-bytes-utils/contracts/BytesLib.sol";
 
+import "../interface/IQNFT.sol";
 import "../interface/IQNFTGov.sol";
 import "../interface/IQNFTSettings.sol";
 
 /**
  * @author fantasy
  */
-contract QNFT is Ownable, ERC721, ReentrancyGuard {
+contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
     using BytesLib for bytes;
-
-    // structs
-    struct NFTCreator {
-        // NFT minter informations
-        string name;
-        address wallet;
-    }
-    struct NFTMeta {
-        // NFT meta informations
-        string name;
-        string color;
-        string story;
-    }
-    struct NFTData {
-        // NFT data
-        uint256 imageId;
-        uint256 bgImageId;
-        uint256 favCoinId;
-        uint256 lockOptionId;
-        uint256 mintAmount;
-        uint256 defaultImageIndex;
-        uint256 createdAt;
-        bool unlocked;
-        NFTMeta meta;
-        NFTCreator creator;
-    }
-
-    // events
-    event DepositQstk(address indexed owner, uint256 amount);
-    event WithdrawQstk(address indexed owner, uint256 amount);
-    event SetTotalSupply(address indexed owner, uint256 totalSupply);
-    event StartMint(address indexed owner, uint256 startedAt);
-    event PauseMint(address indexed owner, uint256 pausedAt);
-    event UnpauseMint(address indexed owner, uint256 unPausedAt);
-    event MintNFT(
-        address indexed user,
-        uint256 indexed nftId,
-        uint256 imageId,
-        uint256 bgImageId,
-        uint256 favCoinId,
-        uint256 lockOptionId,
-        string creator_name,
-        string color,
-        string story
-    );
-    event UpgradeNftImage(
-        address indexed user,
-        uint256 indexed nftId,
-        uint256 oldImageId,
-        uint256 newImageId
-    );
-    event UpgradeNftBackground(
-        address indexed user,
-        uint256 indexed nftId,
-        uint256 oldBgImageId,
-        uint256 newBgImageId
-    );
-    event UpgradeNftCoin(
-        address indexed user,
-        uint256 indexed nftId,
-        uint256 oldFavCoinId,
-        uint256 newFavCoinId
-    );
-    event UnlockQstkFromNft(
-        address indexed user,
-        uint256 indexed nftId,
-        uint256 amount
-    );
-    event SetFoundationWallet(address indexed owner, address wallet);
 
     // constants
     uint256 public constant NFT_SALE_DURATION = 1209600; // 2 weeks
@@ -97,9 +29,9 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
     uint256 public constant PERCENT_MAX = 100;
 
     // qstk
-    address public qstk;
-    uint256 public totalAssignedQstk; // total qstk balance assigned to nfts
-    mapping(address => uint256) public qstkBalances; // locked qstk balances per user
+    address public override qstk;
+    uint256 public override totalAssignedQstk; // total qstk balance assigned to nfts
+    mapping(address => uint256) public override qstkBalances; // locked qstk balances per user
     mapping(address => uint256) public freeAllocations; // free allocated qstk balances per user
     uint256 totalFreeAllocations; // total free allocated qstk balances
     uint256 distributedFreeAllocations; // total distributed amount of free allocations
@@ -113,7 +45,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
     uint256 private nftCount; // circulating supply - minted nft counts
 
     // mint options set
-    bool public mintStarted;
+    bool public override mintStarted;
     bool public mintPaused;
     uint256 public mintStartTime;
 
@@ -227,10 +159,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
      * @dev starts/restarts mint process
      */
     function startMint() public onlyOwner {
-        require(
-            mintStarted == false || mintFinished(),
-            "QNFT: mint in progress"
-        );
+        require(!mintStarted || mintFinished(), "QNFT: mint in progress");
 
         mintStarted = true;
         mintStartTime = block.timestamp;
@@ -265,32 +194,31 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
     /**
      * @dev checks if mint process is finished
      */
-    function mintFinished() public view returns (bool) {
-        require(mintStarted, "QNFT: mint not started");
-
-        return mintStartTime.add(NFT_SALE_DURATION) <= block.timestamp;
+    function mintFinished() public view override returns (bool) {
+        return
+            mintStarted &&
+            mintStartTime.add(NFT_SALE_DURATION) <= block.timestamp;
     }
 
     /**
-     * @dev checks if min vote duration is passed
+     * @dev returns the current vote status
      */
-    function minVoteDurationPassed() public view returns (bool) {
-        require(mintFinished(), "QNFT: NFT sale not ended");
-
-        return
-            mintStartTime.add(NFT_SALE_DURATION).add(MIN_VOTE_DURATION) <=
-            block.timestamp;
-    }
-
-    /**
-     * @dev checks if safe vote end duration is passed
-     */
-    function safeVoteEndDurationPassed() public view returns (bool) {
-        require(minVoteDurationPassed(), "QNFT: wait until safe vote end time");
-
-        return
-            mintStartTime.add(NFT_SALE_DURATION).add(SAFE_VOTE_END_DURATION) <=
-            block.timestamp;
+    function voteStatus() public view override returns (VoteStatus) {
+        if (!mintStarted || !mintFinished()) {
+            return VoteStatus.NotStarted;
+        } else if (
+            block.timestamp <
+            mintStartTime.add(NFT_SALE_DURATION).add(MIN_VOTE_DURATION)
+        ) {
+            return VoteStatus.InProgress;
+        } else if (
+            block.timestamp <
+            mintStartTime.add(NFT_SALE_DURATION).add(SAFE_VOTE_END_DURATION)
+        ) {
+            return VoteStatus.AbleToWithdraw;
+        } else {
+            return VoteStatus.AbleToSafeWithdraw;
+        }
     }
 
     /**
@@ -315,7 +243,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
         uint256 _bgImageId,
         uint256 _favCoinId,
         uint256 _lockOptionId,
-        uint256 _mintAmount,
+        uint256 _lockAmount,
         uint256 _defaultImageIndex,
         string memory _name,
         string memory _creator_name,
@@ -340,13 +268,13 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
                     _bgImageId,
                     _favCoinId,
                     _lockOptionId,
-                    _mintAmount,
+                    _lockAmount,
                     freeAllocations[msg.sender]
                 ),
             "QNFT: insufficient mint price"
         );
 
-        uint256 qstkAmount = _mintAmount.add(freeAllocations[msg.sender]);
+        uint256 qstkAmount = _lockAmount.add(freeAllocations[msg.sender]);
 
         require(
             totalAssignedQstk.add(qstkAmount) <= totalQstkBalance(),
@@ -515,7 +443,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
             "QNFT: not able to unlock"
         );
 
-        uint256 unlockAmount = item.mintAmount;
+        uint256 unlockAmount = item.lockAmount;
         IERC20(qstk).safeTransfer(msg.sender, unlockAmount);
         qstkBalances[msg.sender] = qstkBalances[msg.sender].sub(unlockAmount);
         totalAssignedQstk = totalAssignedQstk.sub(unlockAmount);
@@ -606,7 +534,7 @@ contract QNFT is Ownable, ERC721, ReentrancyGuard {
     ) internal override {
         super._transfer(from, to, tokenId);
 
-        uint256 qstkAmount = nftData[tokenId].mintAmount;
+        uint256 qstkAmount = nftData[tokenId].lockAmount;
 
         // Update QstkBalance
         qstkBalances[to] = qstkBalances[to].add(qstkAmount);
@@ -625,7 +553,5 @@ Upgrade function should check new_QSTK amount is bigger than old_QSTK amount
 
 renameing function 
 Vote status (not_started, ongoing, able_to_withdraw)
-
-mint-option -> lock option
 
  */

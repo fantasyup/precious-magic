@@ -116,7 +116,8 @@ contract QNFTSettings is Ownable, IQNFTSettings {
 
     constructor() {
         qstkPrice = 0.00001 ether; // qstk price = 0.00001 ether
-        nonTokenPriceMultiplier = PERCENT_MAX; // mint price multiplier = 100%;
+        nonTokenPriceMultiplier = PERCENT_MAX; // non token price multiplier = 100%;
+        tokenPriceMultiplier = PERCENT_MAX; // token price multiplier = 100%;
     }
 
     /**
@@ -308,7 +309,7 @@ contract QNFTSettings is Ownable, IQNFTSettings {
     }
 
     /**
-     * @dev returns the mint price of given favorite coin id
+     * @dev returns the mint price of given favorite coin
      */
     function favCoinMintPrice(uint256 _favCoinId)
         public
@@ -437,7 +438,7 @@ contract QNFTSettings is Ownable, IQNFTSettings {
         uint256 _bgImageId,
         uint256 _favCoinId,
         uint256 _lockOptionId,
-        uint256 _mintAmount,
+        uint256 _lockAmount,
         uint256 _freeAmount
     ) public view override returns (uint256) {
         require(
@@ -456,18 +457,18 @@ contract QNFTSettings is Ownable, IQNFTSettings {
         LockOption memory lockOption = lockOptions[_lockOptionId];
 
         require(
-            lockOption.minAmount <= _mintAmount + _freeAmount &&
-                _mintAmount <= lockOption.maxAmount,
+            lockOption.minAmount <= _lockAmount + _freeAmount &&
+                _lockAmount <= lockOption.maxAmount,
             "QNFTSettings: invalid mint amount"
         );
         require(favCoins.length > _favCoinId, "QNFTSettings: invalid fav coin");
 
-        // mintPrice = qstkPrice * mintAmount * discountRate + (imageMintPrice + favCoinMintPrice) * nonTokenPriceMultiplier
+        // mintPrice = qstkPrice * lockAmount * discountRate * tokenPriceMultiplier + (imageMintPrice + favCoinMintPrice) * nonTokenPriceMultiplier
 
         uint256 decimal = IQStk(qnft.qstk()).decimals();
         uint256 tokenPrice =
             qstkPrice
-                .mul(_mintAmount)
+                .mul(_lockAmount)
                 .mul(uint256(PERCENT_MAX).sub(lockOption.discount))
                 .div(10**decimal)
                 .div(PERCENT_MAX);
@@ -498,10 +499,6 @@ contract QNFTSettings is Ownable, IQNFTSettings {
         public
         onlyOwner
     {
-        require(
-            _tokenPriceMultiplier < PERCENT_MAX,
-            "QNFTSettings: invalid discount rate"
-        );
         tokenPriceMultiplier = _tokenPriceMultiplier;
     }
 

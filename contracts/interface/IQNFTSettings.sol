@@ -20,7 +20,7 @@ interface IQNFTSettings {
         view
         returns (uint256);
 
-    function lockOptionLockDuration(uint256 _mintOptionId)
+    function lockOptionLockDuration(uint256 _lockOptionId)
         external
         view
         returns (uint256);
@@ -29,8 +29,8 @@ interface IQNFTSettings {
         uint256 _imageId,
         uint256 _bgImageId,
         uint256 _favCoinId,
-        uint256 _mintOptionId,
-        uint256 _mintAmount,
+        uint256 _lockOptionId,
+        uint256 _lockAmount,
         uint256 _freeAmount
     ) external view returns (uint256);
 }
