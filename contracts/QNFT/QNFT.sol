@@ -38,7 +38,7 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
 
     // nft
     IQNFTSettings settings; // QNFTSettings contract address
-    IQNFTGov governance; // QNFTGov contract address
+    address payable governance; // QNFTGov contract address
     uint256 public totalSupply; // maximum mintable nft count
     mapping(uint256 => NFTData) public nftData;
     mapping(uint256 => uint256) private nftIds;
@@ -55,7 +55,7 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
     constructor(
         address _qstk,
         IQNFTSettings _settings,
-        IQNFTGov _governance,
+        address payable _governance,
         address payable _foundationWallet
     ) ERC721("Quiver NFT", "QNFT") {
         qstk = _qstk;
@@ -65,6 +65,10 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
         // foundation
         foundationWallet = _foundationWallet;
     }
+
+    receive() external payable {}
+
+    fallback() external payable {}
 
     // qstk
 
@@ -306,25 +310,27 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
         uint256 originAmount = qstkBalances[msg.sender];
         qstkBalances[msg.sender] = originAmount.add(qstkAmount);
 
-        governance.updateVoteAmount(
+        IQNFTGov(governance).updateVoteAmount(
             msg.sender,
             originAmount,
             qstkBalances[msg.sender]
         );
 
         // calculate free allocations
-        distributedFreeAllocations = distributedFreeAllocations.add(
-            freeAllocations[msg.sender]
-        );
-        totalFreeAllocations = totalFreeAllocations.sub(
-            freeAllocations[msg.sender]
-        );
-        freeAllocations[msg.sender] = 0;
+        uint256 freeAllocation = freeAllocations[msg.sender];
+        if (freeAllocation > 0) {
+            distributedFreeAllocations = distributedFreeAllocations.add(
+                freeAllocation
+            );
+            totalFreeAllocations = totalFreeAllocations.sub(freeAllocation);
+            freeAllocations[msg.sender] = 0;
+        }
 
         // transfer to foundation wallet
         _transferFoundation(
             msg.value.mul(FOUNDATION_PERCENTAGE).div(PERCENT_MAX)
         );
+        _transferGovernance();
 
         _mint(address(this), nftCount);
 
@@ -368,6 +374,7 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
         _transferFoundation(
             msg.value.mul(FOUNDATION_PERCENTAGE).div(PERCENT_MAX)
         );
+        _transferGovernance();
 
         emit UpgradeNftImage(msg.sender, _nftId, oldImageId, _imageId);
     }
@@ -419,6 +426,7 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
         _transferFoundation(
             msg.value.mul(FOUNDATION_PERCENTAGE).div(PERCENT_MAX)
         );
+        _transferGovernance();
 
         emit UpgradeNftCoin(msg.sender, _nftId, oldFavCoinId, _favCoinId);
     }
@@ -451,6 +459,15 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
         item.unlocked = true;
 
         emit UnlockQstkFromNft(msg.sender, _nftId, unlockAmount);
+    }
+
+    /**
+     * @dev upgrades QSTK token address
+     */
+    function upgradeQStk(address _qstk) public {
+        transferFrom(msg.sender, address(this), totalQstkBalance());
+
+        qstk = _qstk;
     }
 
     // internal functions
@@ -508,6 +525,14 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
     }
 
     /**
+     * @dev transfers given amount of qstk token to governance
+     */
+    function _transferGovernance() internal {
+        // transfer to governance
+        governance.transfer(address(this).balance);
+    }
+
+    /**
      * @dev sets the foundation wallet
      */
     function setFoundationWallet(address payable _foundationWallet)
@@ -540,18 +565,6 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
         qstkBalances[to] = qstkBalances[to].add(qstkAmount);
         qstkBalances[from] = qstkBalances[from].sub(qstkAmount);
 
-        governance.updateVoteAmount(msg.sender, qstkAmount, 0);
+        IQNFTGov(governance).updateVoteAmount(msg.sender, qstkAmount, 0);
     }
 }
-
-/**
-
-Todo: 
-QSTK token address upgrade ability
-Before token upgrade, admin should supply same amount of QSTK token to the contract while upgrade or before upgrade
-Upgrade function should check new_QSTK amount is bigger than old_QSTK amount
-
-renameing function 
-Vote status (not_started, ongoing, able_to_withdraw)
-
- */

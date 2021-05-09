@@ -1,12 +1,10 @@
 const chai = require("chai");
 const { solidity } = require("ethereum-waffle");
 const { ethers } = require("hardhat");
-
 const { expect } = chai;
+const { units } = require("./utils");
 
 chai.use(solidity);
-
-const units = (value) => ethers.utils.parseUnits(value.toString());
 
 describe("QNFT", () => {
   let qstk, qnft, qnftSettings, qnftGov;

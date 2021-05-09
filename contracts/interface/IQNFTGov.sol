@@ -6,5 +6,5 @@ interface IQNFTGov {
         address user,
         uint256 originAmount,
         uint256 newAmount
-    ) external view returns (bool);
+    ) external;
 }

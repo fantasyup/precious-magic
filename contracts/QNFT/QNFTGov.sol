@@ -47,12 +47,19 @@ contract QNFTGov is Ownable, ReentrancyGuard {
 
     constructor() {}
 
+    receive() external payable {}
+
+    fallback() external payable {}
+
     /**
      * @dev votes on a given multisig wallet with the locked qstk balance of the user
      */
     function voteGovernanceAddress(address multisig) public {
         require(qnft.mintStarted(), "QNFTGov: mint not started");
         require(qnft.mintFinished(), "QNFTGov: NFT sale not ended");
+
+        uint256 qstkAmount = qnft.qstkBalances(msg.sender);
+        require(qstkAmount > 0, "QNFTGov: non-zero qstk balance");
 
         if (voteAddressByVoter[msg.sender] != address(0x0)) {
             voteResult[voteAddressByVoter[msg.sender]] = voteResult[
@@ -61,7 +68,6 @@ contract QNFTGov is Ownable, ReentrancyGuard {
                 .sub(voteWeightsByVoter[msg.sender]);
         }
 
-        uint256 qstkAmount = qnft.qstkBalances(msg.sender);
         voteResult[multisig] = voteResult[multisig].add(qstkAmount);
         voteWeightsByVoter[msg.sender] = qstkAmount;
         voteAddressByVoter[msg.sender] = multisig;
@@ -78,11 +84,11 @@ contract QNFTGov is Ownable, ReentrancyGuard {
     {
         IQNFT.VoteStatus status = qnft.voteStatus();
         require(
-            status == IQNFT.VoteStatus.NotStarted,
+            status != IQNFT.VoteStatus.NotStarted,
             "QNFTGov: vote not started"
         );
         require(
-            status == IQNFT.VoteStatus.InProgress,
+            status != IQNFT.VoteStatus.InProgress,
             "QNFTGov: vote in progress"
         );
 
@@ -109,15 +115,15 @@ contract QNFTGov is Ownable, ReentrancyGuard {
     {
         IQNFT.VoteStatus status = qnft.voteStatus();
         require(
-            status == IQNFT.VoteStatus.NotStarted,
+            status != IQNFT.VoteStatus.NotStarted,
             "QNFTGov: vote not started"
         );
         require(
-            status == IQNFT.VoteStatus.InProgress,
+            status != IQNFT.VoteStatus.InProgress,
             "QNFTGov: vote in progress"
         );
         require(
-            status != IQNFT.VoteStatus.AbleToSafeWithdraw,
+            status == IQNFT.VoteStatus.AbleToSafeWithdraw,
             "QNFTGov: wait until safe vote end time"
         );
 
@@ -140,14 +146,14 @@ contract QNFTGov is Ownable, ReentrancyGuard {
             // just updates the vote amount if the user has previous vote.
 
             voteWeightsByVoter[user] = voteWeightsByVoter[user]
-                .sub(originAmount)
-                .add(newAmount);
+                .add(newAmount)
+                .sub(originAmount);
 
             voteResult[voteAddressByVoter[msg.sender]] = voteResult[
                 voteAddressByVoter[msg.sender]
             ]
-                .sub(originAmount)
-                .add(newAmount);
+                .add(newAmount)
+                .sub(originAmount);
 
             if (voteWeightsByVoter[user] == 0) {
                 voteAddressByVoter[user] = address(0x0);
@@ -159,7 +165,7 @@ contract QNFTGov is Ownable, ReentrancyGuard {
      * @dev sets QNFT contract address
      */
     function setQNft(IQNFT _qnft) public onlyOwner {
-        require(qnft != _qnft, "QNFTSettings: QNFT already set");
+        require(qnft != _qnft, "QNFTGov: QNFT already set");
 
         qnft = _qnft;
     }
