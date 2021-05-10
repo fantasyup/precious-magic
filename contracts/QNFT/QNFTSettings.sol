@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+import "../interface/structs.sol";
 import "../interface/IQStk.sol";
 import "../interface/IQNFT.sol";
 import "../interface/IQNFTSettings.sol";
@@ -14,55 +15,6 @@ import "../interface/IQNFTSettings.sol";
  */
 contract QNFTSettings is Ownable, IQNFTSettings {
     using SafeMath for uint256;
-
-    // structs
-
-    struct LockOption {
-        uint256 minAmount; // e.g. 0QSTK, 100QSTK, 200QSTK, 300QSTK
-        uint256 maxAmount; // e.g. 0QSTK, 100QSTK, 200QSTK, 300QSTK
-        uint256 lockDuration; // e.g. 3 months, 6 months, 1 year
-        uint256 discount; // percent e.g. 10%, 20%, 30%
-    }
-    struct NFTBackgroundImage {
-        // Sunrise-Noon-Evening-Night: based on local time
-        string background1;
-        string background2;
-        string background3;
-        string background4;
-    }
-    struct NFTArrowImage {
-        // global crypto market change - up, normal, down
-        string image1;
-        string image2;
-        string image3;
-    }
-    struct NFTImageDesigner {
-        // information of NFT iamge designer
-        string name;
-        address wallet;
-        string meta_info;
-    }
-    struct NFTImage {
-        // each NFT has 5 emotions
-        uint256 mintPrice;
-        string emotion1;
-        string emotion2;
-        string emotion3;
-        string emotion4;
-        string emotion5;
-        NFTImageDesigner designer;
-    }
-    struct NFTFavCoin {
-        // information of favorite coins
-        uint256 mintPrice;
-        string name;
-        string symbol;
-        string icon;
-        string website;
-        string social;
-        address erc20;
-        string other;
-    }
 
     // events
     event SetNonTokenPriceMultiplier(

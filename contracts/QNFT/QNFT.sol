@@ -9,6 +9,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "solidity-bytes-utils/contracts/BytesLib.sol";
 
+import "../interface/structs.sol";
 import "../interface/IQNFT.sol";
 import "../interface/IQNFTGov.sol";
 import "../interface/IQNFTSettings.sol";
@@ -20,6 +21,49 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
     using BytesLib for bytes;
+
+    // events
+    event DepositQstk(address indexed owner, uint256 amount);
+    event WithdrawQstk(address indexed owner, uint256 amount);
+    event SetTotalSupply(address indexed owner, uint256 totalSupply);
+    event StartMint(address indexed owner, uint256 startedAt);
+    event PauseMint(address indexed owner, uint256 pausedAt);
+    event UnpauseMint(address indexed owner, uint256 unPausedAt);
+    event MintNFT(
+        address indexed user,
+        uint256 indexed nftId,
+        uint256 imageId,
+        uint256 bgImageId,
+        uint256 favCoinId,
+        uint256 lockOptionId,
+        string creator_name,
+        string color,
+        string story
+    );
+    event UpgradeNftImage(
+        address indexed user,
+        uint256 indexed nftId,
+        uint256 oldImageId,
+        uint256 newImageId
+    );
+    event UpgradeNftBackground(
+        address indexed user,
+        uint256 indexed nftId,
+        uint256 oldBgImageId,
+        uint256 newBgImageId
+    );
+    event UpgradeNftCoin(
+        address indexed user,
+        uint256 indexed nftId,
+        uint256 oldFavCoinId,
+        uint256 newFavCoinId
+    );
+    event UnlockQstkFromNft(
+        address indexed user,
+        uint256 indexed nftId,
+        uint256 amount
+    );
+    event SetFoundationWallet(address indexed owner, address wallet);
 
     // constants
     uint256 public constant NFT_SALE_DURATION = 1209600; // 2 weeks

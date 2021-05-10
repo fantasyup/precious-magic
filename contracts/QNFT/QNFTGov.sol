@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
+import "../interface/structs.sol";
 import "../interface/IQNFT.sol";
 
 /**
@@ -82,15 +83,9 @@ contract QNFTGov is Ownable, ReentrancyGuard {
         public
         nonReentrant
     {
-        IQNFT.VoteStatus status = qnft.voteStatus();
-        require(
-            status != IQNFT.VoteStatus.NotStarted,
-            "QNFTGov: vote not started"
-        );
-        require(
-            status != IQNFT.VoteStatus.InProgress,
-            "QNFTGov: vote in progress"
-        );
+        VoteStatus status = qnft.voteStatus();
+        require(status != VoteStatus.NotStarted, "QNFTGov: vote not started");
+        require(status != VoteStatus.InProgress, "QNFTGov: vote in progress");
 
         require(
             voteResult[multisig] >=
@@ -113,17 +108,11 @@ contract QNFTGov is Ownable, ReentrancyGuard {
         onlyOwner
         nonReentrant
     {
-        IQNFT.VoteStatus status = qnft.voteStatus();
+        VoteStatus status = qnft.voteStatus();
+        require(status != VoteStatus.NotStarted, "QNFTGov: vote not started");
+        require(status != VoteStatus.InProgress, "QNFTGov: vote in progress");
         require(
-            status != IQNFT.VoteStatus.NotStarted,
-            "QNFTGov: vote not started"
-        );
-        require(
-            status != IQNFT.VoteStatus.InProgress,
-            "QNFTGov: vote in progress"
-        );
-        require(
-            status == IQNFT.VoteStatus.AbleToSafeWithdraw,
+            status == VoteStatus.AbleToSafeWithdraw,
             "QNFTGov: wait until safe vote end time"
         );
 
