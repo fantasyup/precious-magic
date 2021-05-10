@@ -75,7 +75,7 @@ struct NFTData {
     uint256 lockAmount;
     uint256 defaultImageIndex;
     uint256 createdAt;
-    bool unlocked;
+    bool withdrawn;
     NFTMeta meta;
     NFTCreator creator;
 }

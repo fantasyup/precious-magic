@@ -128,21 +128,21 @@ contract QNFTGov is Ownable, ReentrancyGuard {
      */
     function updateVoteAmount(
         address user,
-        uint256 originAmount,
-        uint256 newAmount
+        uint256 minusAmount,
+        uint256 plusAmount
     ) public onlyQnft {
         if (voteAddressByVoter[user] != address(0x0)) {
             // just updates the vote amount if the user has previous vote.
 
             voteWeightsByVoter[user] = voteWeightsByVoter[user]
-                .add(newAmount)
-                .sub(originAmount);
+                .add(plusAmount)
+                .sub(minusAmount);
 
             voteResult[voteAddressByVoter[msg.sender]] = voteResult[
                 voteAddressByVoter[msg.sender]
             ]
-                .add(newAmount)
-                .sub(originAmount);
+                .add(plusAmount)
+                .sub(minusAmount);
 
             if (voteWeightsByVoter[user] == 0) {
                 voteAddressByVoter[user] = address(0x0);

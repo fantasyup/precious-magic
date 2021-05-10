@@ -309,18 +309,18 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
 
         require(_defaultImageIndex < 5, "QNFT: invalid image index");
 
-        require(
-            msg.value >=
-                settings.calcMintPrice(
-                    _imageId,
-                    _bgImageId,
-                    _favCoinId,
-                    _lockOptionId,
-                    _lockAmount,
-                    freeAllocations[msg.sender]
-                ),
-            "QNFT: insufficient mint price"
-        );
+        uint256 mintPrice =
+            settings.calcMintPrice(
+                _imageId,
+                _bgImageId,
+                _favCoinId,
+                _lockOptionId,
+                _lockAmount,
+                freeAllocations[msg.sender]
+            );
+        require(msg.value >= mintPrice, "QNFT: insufficient mint price");
+        // transfer remaining to user
+        payable(msg.sender).transfer(msg.value.sub(mintPrice));
 
         uint256 qstkAmount = _lockAmount.add(freeAllocations[msg.sender]);
 
@@ -351,14 +351,9 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
 
         totalAssignedQstk = totalAssignedQstk.add(qstkAmount);
 
-        uint256 originAmount = qstkBalances[msg.sender];
-        qstkBalances[msg.sender] = originAmount.add(qstkAmount);
+        qstkBalances[msg.sender] = qstkBalances[msg.sender].add(qstkAmount);
 
-        IQNFTGov(governance).updateVoteAmount(
-            msg.sender,
-            originAmount,
-            qstkBalances[msg.sender]
-        );
+        IQNFTGov(governance).updateVoteAmount(msg.sender, 0, qstkAmount);
 
         // calculate free allocations
         uint256 freeAllocation = freeAllocations[msg.sender];
@@ -410,6 +405,8 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
             msg.value >= mintPrice,
             "QNFT: insufficient image upgrade price"
         );
+        // transfer remaining to user
+        payable(msg.sender).transfer(msg.value.sub(mintPrice));
 
         uint256 oldImageId = nftData[_nftId].imageId;
         nftData[_nftId].imageId = _imageId;
@@ -462,6 +459,8 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
             msg.value >= mintPrice,
             "QNFT: insufficient coin upgrade price"
         );
+        // transfer remaining to user
+        payable(msg.sender).transfer(msg.value.sub(mintPrice));
 
         uint256 oldFavCoinId = nftData[_nftId].favCoinId;
         nftData[_nftId].favCoinId = _favCoinId;
@@ -489,7 +488,7 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
         uint256 lockDuration =
             settings.lockOptionLockDuration(item.lockOptionId);
 
-        require(item.unlocked == false, "QNFT: already unlocked");
+        require(item.withdrawn == false, "QNFT: already withdrawn");
         require(
             item.createdAt.add(lockDuration) >= block.timestamp,
             "QNFT: not able to unlock"
@@ -500,7 +499,9 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
         qstkBalances[msg.sender] = qstkBalances[msg.sender].sub(unlockAmount);
         totalAssignedQstk = totalAssignedQstk.sub(unlockAmount);
 
-        item.unlocked = true;
+        IQNFTGov(governance).updateVoteAmount(msg.sender, unlockAmount, 0);
+
+        item.withdrawn = true;
 
         emit UnlockQstkFromNft(msg.sender, _nftId, unlockAmount);
     }
@@ -610,5 +611,6 @@ contract QNFT is IQNFT, Ownable, ERC721, ReentrancyGuard {
         qstkBalances[from] = qstkBalances[from].sub(qstkAmount);
 
         IQNFTGov(governance).updateVoteAmount(msg.sender, qstkAmount, 0);
+        IQNFTGov(governance).updateVoteAmount(to, 0, qstkAmount);
     }
 }
