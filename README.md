@@ -21,84 +21,204 @@ At a stage, we might need to stop minting for our ERC20 and BEP20 as users' requ
 
 ## QNFT ERC721 contract
 
-QNFT contract is providing below functionalities.
-Keep QSTK token and lock it until lock period finish.
-```sol
-// Pseudo code
-contract QNFT is ERC721 {
-  QSTK_TOKEN address;
-  max_nfts_count uint256;
-  remainingqSTK uint256; // amount of token that could be assigned to NFT mint
-  totalLockedQSTK uint256; // amount of token assigned to NFTs already only unlockable when they are unlocked
-  balancesPerNFT map[address][uint256];
-  lockQSTKDuration map[address][uint256];
-  mintableAmounts uint256[3] = []; // 100QSTK, 200QSTK, 300QSTK
-  lockableDurations uint256[3] = []; // 3 months, 6 months, 1 year
-  discounts uint256[3] = []; // 10%, 20%, 30%
-  
-  registerEmotionSet(url1,...url5 memory string) onlyAdmin;
-  removeEmotionSet(emotionId uint256) onlyAdmin;
-  whitelistCoins() onlyAdmin;
-  blacklistCoins() onlyAdmin;
-  depositQSTK() onlyAdmin;
-  withdrawQSTK() onlyAdmin;
-  startNFTMint() onlyAdmin;
-  stopNFTMint() onlyAdmin;
-  resetAdmin() onlyAdmin; // at final, should be governance multisig address
+### Background
 
-  // user should pay ETH when mint, and mint price is calculated by params provided
-  // NFT Mint Price = QSTK initial sale price (0.00001ETH) * QSTK quantity(user input) * discountRateByDuration +  ImageSetPrice (admin) + Coin selection price(admin)
-  mintNFT(emotionId uint256, favCoinId uint256, mintQSTKAmt uint256, lockQSTKDuration uint256) returns ();
-  // At the time of burn event, you will need to not be fully paid for QSTK token
-  burnNFT(nftId uint256) returns ();
-  // Upgrade NFT is to replace image to better one he like and add more tokens as they want - should think of restrictions, it is required when users want to mint more than maximum amount, and remove ones that are not qualified than others
-  upgradeNFT(nftId uint256, imageSetId uint256, tokensAdd uint256) returns ();
-  transferNFT(nftId uint256, to address) returns ();
+Quiver Emotional NFT is an "investment emotion NFT".
 
-  unlockQSTKFromNFT(nftId uint256) returns ();
-  getNFTInfo(nftId uint256) returns ();
- 
-  // TODO: there could be several background type per NFT and it's vary by NFT, could have several background lists like image set
-  // mintNFT could have parameter for NFT background Id - rules are applied same way as image set
+Each NFT is a character like **whale, dragon, fish, deer, bear** and it has 5 emotions - 1 image is assigned per emotion. The emotions are **Angry, Worry, Normal, Rest, Happy**.
 
-  // NFT contract sale is done before governance setup, to ensure governance dev funds are put in correct governance managed multi-sig wallet, we need to add simple voter interface so that the addresses with more purchase of locked QSTK could have more voting power
-  // When vote, users vote with multi-sig receiver address that he has verified.
-  // If Quorum reaches with same target multisig address, it is withdrawable by the admin to the address
-  // If Quorum does not reach within max vote time, admin withdraw this to foundation wallet to govern the development process of quiver protocol with the funds.
- 
-  uint256 minVoteTime = 1 week;
-  uint256 safeVoteEndTime = 3 weeks;
-  uint256 voteQuorum = 50%;
-  uint256 foundationPercentage = 40%; // default - can reset by admin before mint start
-  address foundationWallet = 0xxxxx; // default set as admin wallet on constructor - can reset by admin
-  // TODO: mintNFT: withdraw foundationPercentage of ETH into foundationWallet
-  map[address]uint256 QSTKBalancesByAddress; // TODO: manage this correctly on mint process
-  map[address]uint256 MultisigAddressVoteWeights;
-  map[address]address MultisigAddressVotes;
-  voteGovernanceMultisigAddress(multisig address) {
-     // TODO: check if NFT sale ended
-     if (MultisigAddressVotes[msg.sender] != address(0x0)) { // remove previous vote
-      MultisigAddressVoteWeights[MultisigAddressVotes[msg.sender]] -= QSTKBalancesByAddress[msg.sender];
-     }
-     MultisigAddressVoteWeights[multisig] += QSTKBalancesByAddress[msg.sender];
-     MultisigAddressVotes[msg.sender] = multisig;
-  }
-  
-  withdrawToGovernanceMultisigAddress(multisig address) {
-    // TODO: check if min vote time after NFT sale ended, has passed
-    // TODO: check if MultisigAddressVotes[multisig] passed quorum of total QSTK locked
-    // TODO: withdraw all ETH inside the contract to the address to multisig address
-  }
-  
-  withdrawIfSafeVoteEndTimePassedAndQuorumDoesNotReach(multisig address) onlyAdmin {
-    // TODO: check if safe vote end time passed and quorum does not reach
-    // TODO: withdraw all ETH inside the contract to the address to multisig address specified by the admin
-    // It means no user want to join governance process or they didn't agree on result, admin become the governer in this case.
-  } 
-}
-```
+As it's an investment emotion NFT, each NFT has its favorite coin. One NFT could only have a single favorite coin and NFT should change its emotion by its favorite coin's price change. The visualization from price change is done on frontend. Contract just stores all the possible NFT emotion images and default image index for listing. Users can select their favorite creature as part of a mint process. If the person is interested in BTC and ETH, he can purchase BTC-NFT and ETH-NFT that change their emotions by BTC and ETH price change.
 
-## QInvestor contract
+Another cool feature is that NFT can provide an early purchase of locked QSTK. When user mint, users buy locked QSTK as part of the process and they are able to withdraw it after the lock period passes.
+
+To incentivize users, we offer a cheap price if duration is longer. There's a private sale price in ETH registered inside the contract. It is meant to be $0.01.
+
+And by duration, there are mint amount restrictions by introducing min and max amounts.
+
+NFT miners should pay in ETH for image price and QSTK token price. If a user selected an image which is worth $80 and bought a 6 month lock 10000 QSTK token, he/she should pay $80 + 10000 x $0.01 x 80% that is $160.
+
+### Emotional NFT fields
+
+1. Image set
+2. Background set
+3. Favorite coin
+4. Lock Option
+5. QSTK amount - the locked amount of qstk tokens
+6. Default image index - index of image to show on listing website
+7. Created time - the NFT creation date
+8. Withdrawn - if qstk is withdrawn already
+9. Metadata
+
+- Name - name that NFT minter want to give to the NFT
+- Color - NFT image color
+- Story - story that NFT minter want to put for the NFT
+
+10. Creator information (minter)
+- Creator Address - NFT creator address
+- Creator Name - NFT creator name
+
+### NFT mint params
+
+1. Image set id
+2. Background set id
+3. Favorite coin
+4. Lock Option
+5. QSTK amount to purchase
+6. Default image index
+7. Name
+8. Creator name
+9. Color
+10. Story
+
+### NFTs iteration
+
+1. Apps should be able to fetch all the Ids of available NFTs (starts from 1)
+2. Apps should be able to fetch data of the NFTs by id
+3. Apps should be able to get default image ( image to show on listings)
+
+### NFT upgrade
+We need NFT upgrade as the number of NFTs are restricted and no more could be minted. Anyone who has ownership of NFT should be able to change a few attributes.
+
+1. Image set to different one - user needs to pay for image mint price
+2. Background set to different one - this is for free
+3. Reset favorite coin to different one - user needs to pay for favorite coin mint price
+
+### NFT transfer
+ NFT should be able to be transferred between users so that it can be sold / bought on marketplaces or be sent to friends.
+
+1. Change ownership of the NFT
+2. Change voting power of NFT sender and receiver
+3. Change vote result to set DAO multi-sig address to withdraw ETH
+
+### QSTK token distribution on NFT
+#### Total QSTK tokens put
+
+- Supply QSTK tokens to the contract
+- Only supplied tokens should be able to be sold
+
+#### Free QSTK allocations
+
+- Free allocations are set by admin
+- Free allocation total amount - managed when admin change individual's allocation
+- Free allocation total distributed amount - modified when a user use free allocation while minting NFT
+
+#### QSTK token lock on NFTs - Users can withdraw QSTK after lock duration pass
+#### QSTK token address upgrade ability
+
+- Before token upgrade, admin should supply same amount of QSTK token to the contract while upgrade or before upgrade
+- Upgrade function should check `new_QSTK` amount is bigger than `old_QSTK` amount
+
+### User paid ETH distribution
+
+1. 30% of ETH paid is sent to foundation wallet when it is paid by users while mint, upgrade
+2. 70% of ETH is put on the contract until it's withdrawn to DAO multisig wallet
+3. Same rule is applied for payment by users after mint period finish or finishing withdrawal once
+
+### Governance of fund to withdraw to correct DAO multisig address
+
+1. Why is it required?
+- IDAO address is not set yet as governance is not setup yet
+- To get more people involve governance process
+- To set up governance users
+- To show foundation is giving users permission to withdraw and manage funds
+
+2. What fields are required
+- Vote status (`not_started`, ongoing, `able_to_withdraw`)
+- Vote duration
+- Vote Quorum
+- Vote Power
+
+3. Who can withdraw and when?
+- Withdraw action by normal user if vote quorum pass and min vote period pass
+- Force withdraw action by admin if safe force withdraw time pass and vote quorum does not reach
+
+4. Vote result
+- Vote result by voter
+- Vote result by voted address
+
+### Rounds of NFT sale
+
+1. There are 3 rounds of NFT sale
+2. We are planning to use same smart contract for 3 rounds of sale - it should be secure enough for multiple rounds of NFTs sale
+3. Withdraw shouldn't be able to be done by malicious actors
+
+### Environment variables
+
+#### Constants
+
+- NFT sale duration, 2 weeks
+- Foundation percentage, 30%
+- Min vote duration, 1 week
+- Safe vote end duration, 3 weeks - when admin can force withdraw
+- Vote quorum, 50%
+- Emotion count per NFT, 5
+- Image count for background set, 4
+- Image count for arrows, 3 - it's used to show crypto trending arrow
+
+#### Contract variables
+
+- qstkPrice, QSTK token price without discount expressed in ETH(default: $0.03)
+- nonTokenPriceMultiplier, the percentage to be multiplied to non-token price like images and coins. (default: 100%)
+- tokenPriceMultiplier, the percentage to be multiplied to qstk price. (default: 100%)
+- mintStarted, if mint is started or not
+- mintStartTime, mint start timestamp
+- mintPaused, if mint is paused or not
+- foundationWallet, wallet that foundation owned
+- totalSupply, total number of NFTs to be minted
+- circulatingSupply, total minted NFT count
+- qstk, QSTK contract address
+- totalAssignedQstk, QSTK locked as part of minted NFT
+- qstkBalances, voting power / QSTK balance by address - total sum of nfts QSTK owned by the address
+- freeAllocations, free allocations that user can use while minting his/her first NFT, all free allocations goes to the first NFT he mine.
+- nftImages, list of nft character images that is set on NFT
+- bgImages, list background images that is set on NFT
+- favCoins, list of favorite coins selectable when mint
+- lockOptions, list of QSTK purchase options selectable when mint
+- arrowImage, up/down arrow image to be set as part of background, combined with bgImage
+- nftData, NFT Data by id
+- voteResult, voting power by voted address
+- voteAddressByVoter, voted address by voter address
+- voteWeightByVoter, voted power on voted address
+
+### Admin functionalities
+
+#### QNFT contract
+
+- Deposit and withdraw QSTK
+- Add and remove free allocation
+- Set total NFT supply
+- Set mintable status
+- Safe withdraw of ETH if vote quorum does not reach after time pass
+- Set foundation wallet to receive 30% of purchase
+
+#### QNFTSettings contract
+
+- Set mint price multiplier
+- Add/remove lock option - QSTK discount, min/max manager
+- Add/Remove image set
+- Add/Remove background image set
+- Add/Remove favorite coin
+- Calculate mint price for given lock options
+
+#### QNFTGovernance contract
+ QNFTGovernance is the simple governance contract to manage ETH funds paid by users. It is meant to be used for withdrawing the ETH to correct Quiver IDAO multi-sig wallet. Quiver IDAO multi-sig wallet will be built just after NFT v1 sale finishes.
+
+- Vote on multi-sig wallet with voting power - locked qstk amount
+- Withdraw to multi-sig wallet if it has enough quorum.
+- Force withdrawal to multi-sig wallet if safe vote end duration is passed. (by owner)
+
+#### Contract ownership change
+
+- Delegate admin role to someone else
+- It is meant to be configured to governance multi-sig address when there's functionality for multi-sig address to call NFT admin functions
+
+### Compatibility with NFT marketplaces and visualization apps
+
+- Ability to be detected by general NFT apps
+- Ability to be visualized by general NFT apps
+- Ability to be transferred by general NFT apps - (to sell or give)
+
+## QInvestor contract - upcoming contract for Quiver IDAO fund management
 
 QInvestor contract uses USDT put inside QSTK contract.
 It contains all the on-invest ERC20 tokens, NFT tokens or all the other type of assets that could make profit.
@@ -108,4 +228,3 @@ If user want to withdraw on-invest ERC20 tokens, they can deposit QSTK token int
 ## TODO
 
 - NFT auction should be available when lots of users want to buy NFTs.
-- Reference common NFT contracts for other common functionalities.
