@@ -64,7 +64,7 @@ contract QNFTSettings is Ownable, IQNFTSettings {
     NFTFavCoin[] public favCoins; // array of favorite coins
     mapping(string => uint256) internal favCoinIds; // mapping from coin name to coin id
 
-    IQNFT qnft; // QNFT contract address
+    IQNFT public qnft; // QNFT contract address
 
     constructor() {
         qstkPrice = 0.00001 ether; // qstk price = 0.00001 ether

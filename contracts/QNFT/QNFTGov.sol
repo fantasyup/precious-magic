@@ -35,11 +35,11 @@ contract QNFTGov is Ownable, ReentrancyGuard {
     uint256 public constant PERCENT_MAX = 100;
 
     // vote options
-    mapping(address => uint256) voteResult; // vote amount of give multisig wallet
-    mapping(address => address) voteAddressByVoter; // vote address of given user
-    mapping(address => uint256) voteWeightsByVoter; // vote amoutn of given user
+    mapping(address => uint256) public voteResult; // vote amount of give multisig wallet
+    mapping(address => address) public voteAddressByVoter; // vote address of given user
+    mapping(address => uint256) public voteWeightsByVoter; // vote amoutn of given user
 
-    IQNFT qnft;
+    IQNFT public qnft;
 
     modifier onlyQnft() {
         require(address(qnft) == _msgSender(), "Ownable: caller is not QNFT");
